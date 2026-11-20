@@ -7,7 +7,7 @@ normalizes findings, displays rich terminal output, and optionally exports or sy
 import json
 from pathlib import Path
 import sys
-from typing import List, Optional
+from typing import Any, List, Optional
 import typer
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -17,6 +17,7 @@ from rich.text import Text
 from vulnora.cli.config import load_config
 from vulnora.cli.git_utils import get_git_root
 from vulnora.cli.ui import console, print_banner, render_split_pane
+from vulnora.memory import MatchConfidence, MemoryService
 from vulnora.scanners import (
     NormalizedFinding,
     ScannerOrchestrator,
@@ -122,6 +123,11 @@ def scan_command(
             timeout_seconds=timeout,
         )
 
+        # Memory Lookup: Compare findings against local issue memory (.vulnora/memory.json)
+        mem_service = MemoryService(validated_dir)
+        memory_matches = mem_service.lookup_findings(unified_findings, update_usage=True)
+        match_by_fp = {m.finding_fingerprint: m for m in memory_matches}
+
     # 1. Output raw JSON if requested
     if json_output:
         result_payload = {
@@ -132,7 +138,14 @@ def scan_command(
             "total_findings": len(unified_findings),
             "severity_counts": orchestrator.calculate_severity_counts(unified_findings),
             "scanner_statuses": scanner_statuses,
-            "findings": [f.to_dict() for f in unified_findings],
+            "memory_matches_count": sum(1 for m in memory_matches if m.has_match),
+            "findings": [
+                {
+                    **f.to_dict(),
+                    "memory_match": match_by_fp[f.fingerprint].to_dict() if f.fingerprint in match_by_fp else None,
+                }
+                for f in unified_findings
+            ],
         }
         print(json.dumps(result_payload, indent=2))
         return
@@ -146,6 +159,7 @@ def scan_command(
         scanner_statuses=scanner_statuses,
         findings=unified_findings,
         orchestrator=orchestrator,
+        memory_matches=memory_matches,
     )
 
     # 3. Export to JSON file if requested
@@ -160,7 +174,14 @@ def scan_command(
             "total_findings": len(unified_findings),
             "severity_counts": orchestrator.calculate_severity_counts(unified_findings),
             "scanner_statuses": scanner_statuses,
-            "findings": [f.to_dict() for f in unified_findings],
+            "memory_matches_count": sum(1 for m in memory_matches if m.has_match),
+            "findings": [
+                {
+                    **f.to_dict(),
+                    "memory_match": match_by_fp[f.fingerprint].to_dict() if f.fingerprint in match_by_fp else None,
+                }
+                for f in unified_findings
+            ],
         }
         out_path.write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
         console.print(f"[bold green]✔[/bold green] [white]Exported findings to:[/white] [cyan]{out_path}[/cyan]")
@@ -188,6 +209,7 @@ def _display_scan_results(
     scanner_statuses: dict,
     findings: List[NormalizedFinding],
     orchestrator: ScannerOrchestrator,
+    memory_matches: Optional[List[Any]] = None,
 ):
     """Renders formatted tables, severity breakdowns, and Mascot panel."""
     # Summary of Scanner Executions
@@ -240,6 +262,7 @@ def _display_scan_results(
     console.print()
 
     # Detailed Findings List (Top 15 if many)
+    match_by_fp = {m.finding_fingerprint: m for m in memory_matches} if memory_matches else {}
     if findings:
         console.print(f"[bold yellow]Identified Vulnerabilities ({min(len(findings), 15)} of {len(findings)} shown):[/bold yellow]")
         for idx, f in enumerate(findings[:15], 1):
@@ -254,7 +277,14 @@ def _display_scan_results(
             loc = f"{Path(f.file_path).name}:{f.line_number}" if f.line_number else (Path(f.file_path).name if f.file_path else f.target_url)
             console.print(f"  {idx}. [{sev_color}][{f.severity}][/{sev_color}] [bold]{f.title}[/bold] ({f.rule_id})")
             console.print(f"     [dim]Scanner:[/dim] {f.scanner_name.upper()} | [dim]Location:[/dim] {loc}")
-            if f.remediation:
+            
+            # Show local memory hit if available
+            mem_hit = match_by_fp.get(f.fingerprint)
+            if mem_hit and mem_hit.has_match and mem_hit.record:
+                console.print(f"     [bold green]🧠 MEMORY MATCH ({mem_hit.confidence}):[/bold green] [cyan]{mem_hit.record.id}[/cyan] [dim]– Verified fix available[/dim]")
+                if mem_hit.record.remediation:
+                    console.print(f"     [dim]Verified Fix:[/dim] {mem_hit.record.remediation[:110]}...")
+            elif f.remediation:
                 console.print(f"     [dim]Remediation:[/dim] {f.remediation[:110]}...")
             console.print()
 
@@ -262,12 +292,16 @@ def _display_scan_results(
     mascot_state = "ready" if len(findings) == 0 else "alert"
     border_color = "green" if len(findings) == 0 else "red"
 
+    total_mem_hits = sum(1 for m in memory_matches if m.has_match) if memory_matches else 0
+
     log_lines = []
-    log_lines.append(f"[bold cyan]Scan Target:[/bold cyan]  [white]{target_dir.name}[/white]")
+    log_lines.append(f"[bold cyan]Scan Target:[/bold cyan]    [white]{target_dir.name}[/white]")
     if dast_url:
-        log_lines.append(f"[bold cyan]DAST URL:[/bold cyan]     [white]{dast_url}[/white]")
-    log_lines.append(f"[bold cyan]Scan Status:[/bold cyan]  [bold {border_color}]{overall_status}[/bold {border_color}] (in {duration:.2f}s)")
-    log_lines.append(f"[bold cyan]Findings:[/bold cyan]     [white]{len(findings)} unique issues detected[/white]")
+        log_lines.append(f"[bold cyan]DAST URL:[/bold cyan]       [white]{dast_url}[/white]")
+    log_lines.append(f"[bold cyan]Scan Status:[/bold cyan]    [bold {border_color}]{overall_status}[/bold {border_color}] (in {duration:.2f}s)")
+    log_lines.append(f"[bold cyan]Findings:[/bold cyan]       [white]{len(findings)} unique issues detected[/white]")
+    if total_mem_hits > 0:
+        log_lines.append(f"[bold cyan]Memory Matches:[/bold cyan] [bold green]{total_mem_hits} verified solutions available[/bold green]")
     log_lines.append("")
 
     if len(findings) == 0:

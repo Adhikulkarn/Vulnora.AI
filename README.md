@@ -216,6 +216,30 @@ vulnora scan --sync
 5. **Trivy:** Comprehensive filesystem, software bill of materials (SBOM), and IaC misconfiguration scanner.
 6. **OWASP ZAP:** Dynamic Application Security Testing (DAST) baseline scans against explicitly specified URLs.
 
+#### 4. `vulnora memory`
+Local Issue Memory System storing verified vulnerability resolutions in `.vulnora/memory.json`:
+- **Deterministic Signatures:** Computes collision-resistant SHA-256 signatures combining scanner name, rule ID/CVE, language/file type, and normalized code fingerprints.
+- **Hierarchical Lookup Engine:** Matches recurring issues by exact signature, rule + language, or partial rule match.
+- **Reference-Only Intelligence:** Automatically retrieves previously verified fixes and root causes during `vulnora scan` and `vulnora guard` without modifying source code.
+- **Safe & Atomic:** Uses atomic file replacement with automatic recovery and timestamped backups if corrupted. Never stores raw secrets or API keys.
+
+```powershell
+# 1. List all stored verified vulnerability resolutions:
+vulnora memory list
+
+# 2. View complete details, root cause, and remediation for a memory record:
+vulnora memory show mem_d885ba4a1d
+
+# 3. Search memory records by scanner, rule ID, severity, or keyword:
+vulnora memory search --scanner bandit --query "MD5"
+
+# 4. Display memory usage analytics and match frequencies:
+vulnora memory stats
+
+# 5. Record a verified vulnerability resolution into local memory:
+vulnora memory record --title "Insecure MD5 Hash" --scanner bandit --rule-id B303 --severity HIGH --root-cause "Weak hashing algorithm" --remediation "Use hashlib.sha256()" --file-path "auth.py" --verified
+```
+
 ---
 
 ## 5. API Endpoints

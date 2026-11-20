@@ -8,6 +8,7 @@ import typer
 
 from .commands.guard_cmd import guard_command
 from .commands.init_cmd import init_command
+from .commands.memory_cmd import memory_app
 from .commands.scan_cmd import scan_command
 from .ui import console
 
@@ -48,6 +49,7 @@ def main(
 app.command(name="init", help="Initialize Vulnora configuration, issue memory, and .gitignore settings.")(init_command)
 app.command(name="scan", help="Run multi-scanner security analysis across files, dependencies, and URLs.")(scan_command)
 app.command(name="guard", help="Evaluate branch-aware protection status for protected branches (main, production).")(guard_command)
+app.add_typer(memory_app, name="memory", help="Manage and query previously resolved vulnerabilities and verified fixes.")
 
 
 if __name__ == "__main__":

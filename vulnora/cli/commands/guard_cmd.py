@@ -21,6 +21,7 @@ from ..git_utils import (
     parse_push_refs,
 )
 from ..ui import console, print_banner, render_split_pane
+from vulnora.memory import MemoryService
 from vulnora.scanners import ScannerOrchestrator, Severity
 
 
@@ -173,6 +174,14 @@ def _handle_hook_execution(
         f"[yellow]Med: {sev_counts[Severity.MEDIUM]}[/yellow] | "
         f"[blue]Low: {sev_counts[Severity.LOW]}[/blue]"
     )
+
+    # Local Issue Memory Lookup
+    mem_service = MemoryService(repo_root)
+    mem_matches = mem_service.lookup_findings(unified_findings, update_usage=True)
+    mem_hits = sum(1 for m in mem_matches if m.has_match)
+    if mem_hits > 0:
+        log_lines.append(f"  [dim]• Memory Matches:[/dim] [bold green]{mem_hits} verified resolutions found in local memory[/bold green]")
+
     log_lines.append("")
     log_lines.append("[bold green]✔ Pre-push branch guard check passed (Phase 3 placeholder: push permitted).[/bold green]")
 
@@ -256,6 +265,13 @@ def _handle_manual_execution(
             f"[blue]Low: {sev_counts[Severity.LOW]}[/blue] | "
             f"[dim]Total: {len(unified_findings)}[/dim]"
         )
+
+        # Local Issue Memory Lookup
+        mem_service = MemoryService(target)
+        mem_matches = mem_service.lookup_findings(unified_findings, update_usage=True)
+        mem_hits = sum(1 for m in mem_matches if m.has_match)
+        if mem_hits > 0:
+            log_lines.append(f"  • [dim]Memory Matches:[/dim] [bold green]{mem_hits} verified resolutions found in local memory[/bold green]")
     else:
         mascot_state = "guarding"
         border_color = "cyan"

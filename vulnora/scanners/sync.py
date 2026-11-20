@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 
+from vulnora.cli.config import load_config
 from .data_structures import NormalizedFinding
 
 logger = logging.getLogger(__name__)
@@ -36,8 +37,6 @@ def sync_scan_to_backend(
     Returns:
         (success: bool, status_message: str)
     """
-    from vulnora.cli.config import load_config
-
     config = load_config(base_path)
     backend_cfg = config.get("backend", {})
     if not backend_cfg.get("sync_history", True):
