@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vulnora-backend"
+name = "vulnora"
 version = "1.0.0"
-description = "Vulnora AI Backend: Branch-Aware Security Guard & Multi-Scanner Orchestrator"
+description = "Vulnora AI: Branch-Aware Security Guard & Multi-Scanner Orchestrator"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -31,7 +31,13 @@ dependencies = [
     "semgrep>=1.100.0",
     "zaproxy>=0.6.0",
     "requests>=2.31.0",
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "pyyaml>=6.0.1",
 ]
+
+[project.scripts]
+vulnora = "vulnora.cli.main:app"
 
 [project.optional-dependencies]
 build = [

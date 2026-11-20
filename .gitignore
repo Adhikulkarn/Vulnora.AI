@@ -55,3 +55,8 @@ staticfiles/
 .DS_Store
 Thumbs.db
 
+# Vulnora AI Local State & Cache
+.vulnora/logs/
+.vulnora/*.local.yaml
+$HOME/
+*.git/

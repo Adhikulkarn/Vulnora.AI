@@ -18,4 +18,9 @@ semgrep>=1.100.0
 zaproxy>=0.6.0
 requests>=2.31.0
 
+# CLI & Terminal UI
+typer>=0.12.0
+rich>=13.7.0
+pyyaml>=6.0.1
+
 
