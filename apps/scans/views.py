@@ -32,7 +32,7 @@ class ScansModuleIndexView(APIView):
         return Response(
             {
                 "module": "scans",
-                "description": "Orchestrates and normalizes findings from Gitleaks, Semgrep, Bandit, and OSV-Scanner.",
+                "description": "Orchestrates and normalizes findings from Gitleaks, Semgrep, Bandit, OSV-Scanner, Trivy, and OWASP ZAP.",
                 "status": "operational",
                 "integrated_scanners": [
                     f"{name} ({'Available: ' + str(meta['version']) if meta['installed'] else 'Not Installed'})"
@@ -67,7 +67,8 @@ class ScanListCreateView(APIView):
         serializer = ScanInitiateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        project_path = serializer.validated_data["project_path"]
+        project_path = serializer.validated_data.get("project_path")
+        target_url = serializer.validated_data.get("target_url")
         scanners = serializer.validated_data.get("scanners")
         timeout_seconds = serializer.validated_data.get("timeout_seconds", 60)
 
@@ -76,6 +77,7 @@ class ScanListCreateView(APIView):
         try:
             session = orchestrator.execute_and_record(
                 raw_project_path=project_path,
+                target_url=target_url,
                 scanners_to_run=scanners,
                 timeout_seconds=timeout_seconds,
             )
@@ -88,6 +90,16 @@ class ScanListCreateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         except (ValueError, NotADirectoryError, PermissionError) as val_err:
+            return Response(
+                {"error": "Invalid project directory or target URL", "detail": str(val_err)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as exc:
+            logger.exception(f"Scan initiation failed unexpectedly: {exc}")
+            return Response(
+                {"error": "Scan execution failed", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
             return Response(
                 {"error": "Invalid project directory", "detail": str(val_err)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -131,6 +143,7 @@ class ScanSummaryView(APIView):
             "scan_id": session.id,
             "status": session.status,
             "project_path": session.project_path,
+            "target_url": session.target_url,
             "scanners": session.scanner_statuses,
             "severity_summary": {
                 "CRITICAL": session.critical_count,

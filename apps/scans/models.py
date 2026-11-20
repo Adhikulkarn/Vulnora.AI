@@ -24,7 +24,8 @@ class ScanSession(TimeStampedModel):
     """
     Represents a full security scanning execution across selected or all scanners.
     """
-    project_path = models.CharField(max_length=1024)
+    project_path = models.CharField(max_length=1024, blank=True, default="")
+    target_url = models.CharField(max_length=1024, blank=True, default="")
     status = models.CharField(
         max_length=32,
         choices=ScanStatus.choices,

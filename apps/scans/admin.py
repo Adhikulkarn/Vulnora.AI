@@ -24,6 +24,7 @@ class ScanSessionAdmin(admin.ModelAdmin):
         "id",
         "status",
         "project_path",
+        "target_url",
         "total_findings",
         "critical_count",
         "high_count",
