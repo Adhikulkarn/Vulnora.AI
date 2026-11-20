@@ -9,6 +9,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from apps.scans.views import VulnerabilityListView
 
 urlpatterns = [
     # Django Admin
@@ -23,6 +24,7 @@ urlpatterns = [
     path("api/v1/", include("apps.core.urls")),
     path("api/v1/projects/", include("apps.projects.urls")),
     path("api/v1/scans/", include("apps.scans.urls")),
+    path("api/v1/vulnerabilities/", VulnerabilityListView.as_view(), name="vulnerabilities-list"),
     path("api/v1/remediation/", include("apps.remediation.urls")),
     path("api/v1/ai/", include("apps.ai_engine.urls")),
 ]
