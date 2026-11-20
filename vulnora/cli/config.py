@@ -14,6 +14,7 @@ DEFAULT_CONFIG_TEMPLATE: Dict[str, Any] = {
     "project": {
         "name": "vulnora-project",
         "language": "auto",
+        "write_permission": "prompt",
     },
     "git": {
         "protected_branches": DEFAULT_PROTECTED_BRANCHES,
@@ -29,16 +30,28 @@ DEFAULT_CONFIG_TEMPLATE: Dict[str, Any] = {
         "auto_install_missing": False,
     },
     "ai": {
-        "enabled": False,
-        "provider": "ollama",
+        "enabled": True,
+        "base_url": "http://127.0.0.1:11435",
         "model": "qwen2.5-coder:7b",
-        "endpoint": "http://localhost:11434",
+        "timeout_seconds": 90,
+        "think": False,
     },
     "backend": {
         "url": "http://127.0.0.1:8000",
         "sync_history": True,
     },
 }
+
+
+def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merges override dictionary into base dictionary."""
+    merged = dict(base)
+    for key, val in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(val, dict):
+            merged[key] = _deep_merge_dict(merged[key], val)
+        else:
+            merged[key] = val
+    return merged
 
 
 def get_vulnora_dir(base_path: Optional[Path] = None) -> Path:
@@ -55,6 +68,7 @@ def get_config_path(base_path: Optional[Path] = None) -> Path:
 def load_config(base_path: Optional[Path] = None) -> Dict[str, Any]:
     """
     Loads .vulnora/config.yaml if it exists, otherwise returns DEFAULT_CONFIG_TEMPLATE.
+    Performs recursive deep merge so existing config files cleanly inherit new default keys.
     """
     cfg_file = get_config_path(base_path)
     if not cfg_file.exists():
@@ -63,9 +77,9 @@ def load_config(base_path: Optional[Path] = None) -> Dict[str, Any]:
     try:
         with cfg_file.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-            merged = dict(DEFAULT_CONFIG_TEMPLATE)
-            merged.update(data)
-            return merged
+            if not isinstance(data, dict):
+                return dict(DEFAULT_CONFIG_TEMPLATE)
+            return _deep_merge_dict(DEFAULT_CONFIG_TEMPLATE, data)
     except Exception:
         return dict(DEFAULT_CONFIG_TEMPLATE)
 
@@ -106,5 +120,60 @@ def is_pre_push_hook_enabled(base_path: Optional[Path] = None) -> bool:
     if isinstance(hook_cfg, bool):
         return hook_cfg
     return True
+
+
+def get_ai_config(base_path: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    Returns the configured AI inference settings dictionary.
+    """
+    config = load_config(base_path)
+    return dict(config.get("ai", DEFAULT_CONFIG_TEMPLATE["ai"]))
+
+
+def get_write_permission(base_path: Optional[Path] = None) -> str:
+    """
+    Returns the configured write permission mode ('prompt' or 'auto').
+    """
+    config = load_config(base_path)
+    perm = (
+        config.get("project", {}).get("write_permission")
+        or config.get("write_permission")
+        or "prompt"
+    )
+    return str(perm).strip().lower()
+
+
+def ensure_django_setup():
+    """
+    Ensures Django settings and applications are initialized when running
+    via the standalone CLI without manage.py.
+    """
+    import os
+    import sys
+
+    curr = Path(__file__).resolve().parent
+    repo_root = None
+    for p in [curr, curr.parent, curr.parent.parent]:
+        if (p / "manage.py").exists() and (p / "apps").exists():
+            repo_root = p
+            break
+    if not repo_root:
+        repo_root = Path.cwd().resolve()
+
+    apps_dir = repo_root / "apps"
+    if str(apps_dir) not in sys.path:
+        sys.path.insert(0, str(apps_dir))
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vulnora.settings.development")
+    try:
+        import django
+        from django.apps import apps
+        if not apps.ready:
+            django.setup()
+    except Exception:
+        pass
+
 
 

@@ -141,3 +141,45 @@ def print_error(message: str, detail: Optional[str] = None):
 def print_info(message: str):
     """Prints a styled informational message."""
     console.print(f"[bold blue]ℹ[/bold blue] [dim]{message}[/dim]")
+
+
+def display_remediation_card(finding: dict, fix_payload: dict, source: str = "Remote AI"):
+    """
+    Renders a styled Rich panel showing the vulnerability finding,
+    root cause, explanation, and proposed replacement code.
+    """
+    title = finding.get("title", "Security Finding")
+    rule_id = finding.get("rule_id", "")
+    severity = str(finding.get("severity", "MEDIUM")).upper()
+    file_path = finding.get("file_path", "")
+    line_num = finding.get("line_number")
+    loc = f"{file_path}:{line_num}" if line_num else file_path
+
+    sev_color = "red" if severity in ("CRITICAL", "HIGH") else ("yellow" if severity == "MEDIUM" else "cyan")
+
+    content = Text()
+    content.append("Finding: ", style="bold white")
+    content.append(f"{title} ", style=f"bold {sev_color}")
+    content.append(f"[{severity}]\n", style=f"bold {sev_color}")
+    content.append(f"Location: {loc}  |  Rule: {rule_id}\n\n", style="dim")
+
+    content.append("Root Cause:\n", style="bold cyan")
+    content.append(f"{fix_payload.get('root_cause', 'Vulnerability detected.')}\n\n", style="white")
+
+    content.append("Remediation Explanation:\n", style="bold green")
+    content.append(f"{fix_payload.get('explanation', '')}\n\n", style="white")
+
+    replacement_code = fix_payload.get("replacement_code") or fix_payload.get("patched_snippet") or ""
+    if replacement_code:
+        content.append("Proposed Replacement Code:\n", style="bold yellow")
+        content.append(f"{replacement_code}\n", style="bold green")
+
+    panel = Panel(
+        content,
+        title=f"[bold {sev_color}]Remediation Proposal ({source})[/bold {sev_color}]",
+        subtitle=f"[dim]Source: {source}[/dim]",
+        border_style=sev_color,
+        padding=(1, 2),
+    )
+    console.print(panel)
+

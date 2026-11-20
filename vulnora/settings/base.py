@@ -182,11 +182,16 @@ CORS_ALLOWED_ORIGINS = [
 # Vulnora Platform Integration Configuration (Placeholders for upcoming phases)
 # ==============================================================================
 VULNORA_REMOTE_AI_ENDPOINT = os.getenv(
-    "VULNORA_REMOTE_AI_ENDPOINT", "http://127.0.0.1:11434"
+    "VULNORA_REMOTE_AI_ENDPOINT", "http://127.0.0.1:11435"
 )
 VULNORA_REMOTE_AI_MODEL = os.getenv("VULNORA_REMOTE_AI_MODEL", "qwen2.5-coder:7b")
 VULNORA_REMOTE_AI_TIMEOUT_SECONDS = int(
-    os.getenv("VULNORA_REMOTE_AI_TIMEOUT_SECONDS", "60")
+    os.getenv("VULNORA_REMOTE_AI_TIMEOUT_SECONDS", "90")
+)
+VULNORA_REMOTE_AI_THINK = os.getenv("VULNORA_REMOTE_AI_THINK", "False").lower() in (
+    "true",
+    "1",
+    "yes",
 )
 
 VULNORA_PROTECTED_BRANCHES = [

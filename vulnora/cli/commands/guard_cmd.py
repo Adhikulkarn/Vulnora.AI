@@ -151,17 +151,63 @@ def _handle_hook_execution(
     log_lines.append("[white]Policy Enforced:[/white] [bold red]ZERO CRITICAL / ZERO HIGH VULNERABILITIES[/bold red]")
     log_lines.append("")
     log_lines.append("[bold yellow]Security Scanning Pipeline:[/bold yellow]")
-    log_lines.append("  [dim]• Multi-scanner engine (SAST, DAST, SCA, Secrets) ready for integration.[/dim]")
-    log_lines.append("  [dim]• Remote AI inference gateway ready for automated patch generation.[/dim]")
+
+    # Execute Multi-Scanner Engine
+    from ..config import ensure_django_setup
+    ensure_django_setup()
+    from apps.scans.services.orchestrator import ScannerOrchestrator
+    from ..remediation_workflow import run_remediation_workflow
+
+    config = load_config(repo_root)
+    scanners = config.get("scanners", {}).get("enabled", ["gitleaks", "semgrep", "bandit", "osv-scanner", "trivy", "zap"])
+    timeout_sec = config.get("scanners", {}).get("timeout_seconds", 60)
+
+    orchestrator = ScannerOrchestrator()
+    overall_status, scanner_statuses, findings, duration = orchestrator.run_scan(
+        project_path=repo_root,
+        scanners_to_run=scanners,
+        timeout_seconds=timeout_sec,
+    )
+
+    log_lines.append(f"  [dim]• Executed {len(scanner_statuses)} scanner(s) in {duration:.2f}s ({len(findings)} findings).[/dim]")
+
+    blocking_findings = []
+    if findings:
+        console.print(f"[bold cyan]Vulnora Guard detected {len(findings)} security finding(s). Running remediation pipeline...[/bold cyan]")
+        resolved, discarded, unaddressed = run_remediation_workflow(
+            project_root=repo_root,
+            findings=findings,
+            interactive=sys.stdin.isatty(),
+        )
+        blocking_findings = [
+            f for f in unaddressed
+            if (getattr(f, "severity", "") or (f.get("severity") if isinstance(f, dict) else "")).upper() in ("CRITICAL", "HIGH")
+        ]
+        log_lines.append(f"  [dim]• Remediation: {len(resolved)} fixed, {len(discarded)} discarded, {len(unaddressed)} unaddressed.[/dim]")
+
+    if blocking_findings and config.get("git", {}).get("block_on_critical", True):
+        log_lines.append("")
+        log_lines.append(f"[bold red]✖ GATE BLOCKED: {len(blocking_findings)} unaddressed CRITICAL/HIGH vulnerability(ies) violate branch policy.[/bold red]")
+        layout = render_split_pane(
+            mascot_state="alert",
+            log_title=f"Branch Guard Policy Blocked ({', '.join(protected_destinations)})",
+            log_lines=log_lines,
+            mascot_subtitle="Guard Status: BLOCKED",
+            border_style="red",
+        )
+        console.print(layout)
+        console.print("[bold red]Push rejected by Vulnora AI Security Guard. Fix or accept findings before pushing.[/bold red]")
+        raise typer.Exit(code=1)
+
     log_lines.append("")
     log_lines.append("[bold green]✔ Pre-push branch guard check passed (Phase 2 placeholder).[/bold green]")
 
     layout = render_split_pane(
-        mascot_state="alert",
+        mascot_state="ready" if not findings else "guarding",
         log_title=f"Branch Guard Policy ({', '.join(protected_destinations)})",
         log_lines=log_lines,
-        mascot_subtitle="Guard Status: INTERCEPTED",
-        border_style="red",
+        mascot_subtitle="Guard Status: PASSED",
+        border_style="green",
     )
     console.print(layout)
 
