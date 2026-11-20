@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vulnora-backend"
+version = "1.0.0"
+description = "Vulnora AI Backend: Branch-Aware Security Guard & Multi-Scanner Orchestrator"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Vulnora AI Team" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Framework :: Django :: 5.1",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "Django>=5.1.0,<5.2.0",
+    "djangorestframework>=3.15.2",
+    "python-dotenv>=1.0.1",
+    "dj-database-url>=2.2.0",
+    "django-cors-headers>=4.4.0",
+    "drf-spectacular>=0.27.2",
+    "bandit>=1.8.0",
+    "semgrep>=1.100.0",
+]
+
+[project.optional-dependencies]
+build = [
+    "build",
+    "wheel",
+    "setuptools>=68.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vulnora*", "apps*"]
+exclude = ["tests*", "scratch*", ".venv*"]
+
