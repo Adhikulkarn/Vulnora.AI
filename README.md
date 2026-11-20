@@ -1,3 +1,5 @@
+
+
 # Vulnora AI - Backend Service
 
 > **Branch-Aware CLI Security Guard with Tiered Auto-Remediation, Remote Open-Weight AI Inference, and Local Issue Memory**
@@ -181,14 +183,61 @@ git:
 
 
 #### 3. `vulnora scan`
-Prepares and executes the multi-scanner security analysis pipeline across files, dependencies, and target URLs:
+Executes local security scanners directly against your repository code, dependencies, and optional running web applications:
 
 ```powershell
+# 1. Run all available filesystem scanners against the current repository:
 vulnora scan
-# Scan a specific directory or URL:
-vulnora scan --path "C:\path\to\code" --target-url "http://127.0.0.1:8000"
-# Run specific scanners:
-vulnora scan --scanner bandit --scanner trivy
+
+# 2. Scan a specific directory:
+vulnora scan --path "C:\path\to\code"
+
+# 3. Select individual scanners:
+vulnora scan --scanner bandit --scanner gitleaks
+
+# 4. Perform DAST scanning against an explicitly provided running web application:
+vulnora scan --zap-target "http://127.0.0.1:8000" --scanner zap
+
+# 5. Export structured results to a JSON file:
+vulnora scan --output scan-results.json
+
+# 6. Stream JSON directly to stdout for CI/CD scripting:
+vulnora scan --json
+
+# 7. Optionally synchronize scan results with the central Vulnora backend:
+vulnora scan --sync
+```
+
+##### Supported Security Scanners:
+1. **Gitleaks:** Detects committed API keys, tokens, passwords, and private secrets (with automatic redaction in all outputs).
+2. **Semgrep:** Fast multi-language SAST pattern scanning for vulnerabilities and insecure idioms.
+3. **Bandit:** Python AST static code security analysis.
+4. **OSV-Scanner:** Open-source vulnerability scanner querying the Google OSV database for dependencies.
+5. **Trivy:** Comprehensive filesystem, software bill of materials (SBOM), and IaC misconfiguration scanner.
+6. **OWASP ZAP:** Dynamic Application Security Testing (DAST) baseline scans against explicitly specified URLs.
+
+#### 4. `vulnora memory`
+Local Issue Memory System storing verified vulnerability resolutions in `.vulnora/memory.json`:
+- **Deterministic Signatures:** Computes collision-resistant SHA-256 signatures combining scanner name, rule ID/CVE, language/file type, and normalized code fingerprints.
+- **Hierarchical Lookup Engine:** Matches recurring issues by exact signature, rule + language, or partial rule match.
+- **Reference-Only Intelligence:** Automatically retrieves previously verified fixes and root causes during `vulnora scan` and `vulnora guard` without modifying source code.
+- **Safe & Atomic:** Uses atomic file replacement with automatic recovery and timestamped backups if corrupted. Never stores raw secrets or API keys.
+
+```powershell
+# 1. List all stored verified vulnerability resolutions:
+vulnora memory list
+
+# 2. View complete details, root cause, and remediation for a memory record:
+vulnora memory show mem_d885ba4a1d
+
+# 3. Search memory records by scanner, rule ID, severity, or keyword:
+vulnora memory search --scanner bandit --query "MD5"
+
+# 4. Display memory usage analytics and match frequencies:
+vulnora memory stats
+
+# 5. Record a verified vulnerability resolution into local memory:
+vulnora memory record --title "Insecure MD5 Hash" --scanner bandit --rule-id B303 --severity HIGH --root-cause "Weak hashing algorithm" --remediation "Use hashlib.sha256()" --file-path "auth.py" --verified
 ```
 
 ---

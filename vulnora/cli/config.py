@@ -38,7 +38,7 @@ DEFAULT_CONFIG_TEMPLATE: Dict[str, Any] = {
     },
     "backend": {
         "url": "http://127.0.0.1:8000",
-        "sync_history": True,
+        "sync_history": False,
     },
 }
 

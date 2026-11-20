@@ -90,7 +90,7 @@ class VulnoraCLITestCase(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("GITLEAKS", result.output)
         self.assertIn("TRIVY", result.output)
-        self.assertIn("CLI Scanner Foundation Initialized", result.output)
+        self.assertIn("Security Scanner Execution Summary", result.output)
 
     def test_gitignore_update(self):
         gitignore = self.project_path / ".gitignore"
