@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+.env.local
+*.secret
+*.pem
+*.key
+
+# Django & SQLite
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Vulnora Local Memory & Cache (as specified in Vulnora AI proposal)
+.vulnora/memory.json
+.vulnora/cache/
+.vulnora/*.tmp
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
