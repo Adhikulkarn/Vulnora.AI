@@ -12,3 +12,15 @@ django-cors-headers>=4.4.0
 # API Documentation / Schema
 drf-spectacular>=0.27.2
 
+# Security Scanning Tools
+bandit>=1.8.0
+semgrep>=1.100.0
+zaproxy>=0.6.0
+requests>=2.31.0
+
+# CLI & Terminal UI
+typer>=0.12.0
+rich>=13.7.0
+pyyaml>=6.0.1
+
+

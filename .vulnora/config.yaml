@@ -1,0 +1,28 @@
+version: '1.0'
+project:
+  name: vulnora-backend
+  language: auto
+git:
+  protected_branches:
+  - main
+  - production
+  enforce_pre_push: true
+  block_on_critical: true
+scanners:
+  enabled:
+  - gitleaks
+  - semgrep
+  - bandit
+  - osv-scanner
+  - trivy
+  - zap
+  timeout_seconds: 60
+  auto_install_missing: false
+ai:
+  enabled: false
+  provider: ollama
+  model: qwen2.5-coder:7b
+  endpoint: http://localhost:11434
+backend:
+  url: http://127.0.0.1:8000
+  sync_history: true

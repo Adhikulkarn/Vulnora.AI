@@ -111,7 +111,89 @@ vulnora-backend/
 
 ---
 
-## 4. API Endpoints
+## 4. Vulnora AI CLI Foundation
+
+Vulnora includes an installable command-line interface (`vulnora`) built with **Typer** and styled with **Rich** terminal UI, featuring the Vulnora Sentinel Mascot split-pane interface.
+
+### 4.1 CLI Installation
+
+Install the package locally in editable development mode:
+
+```powershell
+pip install -e .
+```
+
+Verify installation:
+```powershell
+vulnora --version
+vulnora --help
+```
+
+### 4.2 CLI Commands
+
+#### 1. `vulnora init`
+Initializes Vulnora AI in the target Git repository:
+- Validates the current directory is a Git repository.
+- Generates the `.vulnora/` workspace.
+- Creates `.vulnora/config.yaml` with protected branch configurations (`main`, `production`).
+- Creates `.vulnora/memory.json` for issue-memory and patch state tracking.
+- Updates `.gitignore` to protect cache, memory, and local configuration files.
+- Installs the Git **pre-push hook** (`.git/hooks/pre-push`) with non-destructive chaining of existing hooks (`.pre-vulnora`).
+
+```powershell
+vulnora init
+# Or initialize a specific directory:
+vulnora init --path "C:\path\to\project"
+```
+
+#### 2. `vulnora guard`
+Evaluates branch protection policies based on your current checked-out Git branch or Git pre-push hook input:
+- Receives ref updates streamed by Git on `git push` (`<local_ref> <local_sha> <remote_ref> <remote_sha>`).
+- Detects whether push targets protected destination branches (`main`, `production`).
+- Bypasses security checks safely for branch deletions and tag pushes.
+- Displays the live Rich split-pane terminal interface with the Sentinel Mascot.
+
+```powershell
+vulnora guard
+# Or test a specific branch policy manually:
+vulnora guard --branch feature/login-auth
+```
+
+### 4.3 Git Pre-Push Hook & Protected Branch Configuration
+
+Vulnora intercepts pushes targeting protected branches defined in `.vulnora/config.yaml`:
+
+```yaml
+version: "1.0"
+git:
+  protected_branches:
+    - main
+    - production
+  pre_push_hook:
+    enabled: true
+  enforce_pre_push: true
+  block_on_critical: true
+```
+
+- **Protected Pushes:** When pushing commits to `main` or `production`, Vulnora intercepts the push, displays the Sentinel Alert Mascot, and runs security checks.
+- **Feature Branches:** Pushing to non-protected branches (e.g. `develop`, `feature/xyz`) bypasses security checks to maintain fast developer iteration.
+- **Hook Chaining:** If your repository already has a custom pre-push hook, `vulnora init` backs it up to `.git/hooks/pre-push.pre-vulnora` and executes both safely.
+
+
+#### 3. `vulnora scan`
+Prepares and executes the multi-scanner security analysis pipeline across files, dependencies, and target URLs:
+
+```powershell
+vulnora scan
+# Scan a specific directory or URL:
+vulnora scan --path "C:\path\to\code" --target-url "http://127.0.0.1:8000"
+# Run specific scanners:
+vulnora scan --scanner bandit --scanner trivy
+```
+
+---
+
+## 5. API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|

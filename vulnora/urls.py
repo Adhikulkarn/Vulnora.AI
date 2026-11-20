@@ -9,6 +9,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from apps.scans.views import VulnerabilityListView
 
 urlpatterns = [
     # Django Admin
@@ -17,12 +18,15 @@ urlpatterns = [
     # OpenAPI 3 / Swagger Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema")),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema")),
 
     # API v1 Endpoints
     path("api/v1/", include("apps.core.urls")),
     path("api/v1/projects/", include("apps.projects.urls")),
     path("api/v1/scans/", include("apps.scans.urls")),
+    path("api/v1/vulnerabilities/", VulnerabilityListView.as_view(), name="vulnerabilities-list"),
     path("api/v1/remediation/", include("apps.remediation.urls")),
     path("api/v1/ai/", include("apps.ai_engine.urls")),
 ]

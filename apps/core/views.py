@@ -32,6 +32,7 @@ class ApiRootView(APIView):
                     "status": request.build_absolute_uri("/api/v1/status/"),
                     "projects": request.build_absolute_uri("/api/v1/projects/"),
                     "scans": request.build_absolute_uri("/api/v1/scans/"),
+                    "vulnerabilities": request.build_absolute_uri("/api/v1/vulnerabilities/"),
                     "remediation": request.build_absolute_uri("/api/v1/remediation/"),
                     "ai_engine": request.build_absolute_uri("/api/v1/ai/"),
                 },
