@@ -7,5 +7,6 @@ class AiEngineModuleInfoSerializer(serializers.Serializer):
     status = serializers.CharField()
     remote_endpoint = serializers.CharField()
     active_model = serializers.CharField()
+    think = serializers.BooleanField(default=False)
     capabilities = serializers.ListField(child=serializers.CharField())
 

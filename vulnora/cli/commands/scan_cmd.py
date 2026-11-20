@@ -320,3 +320,37 @@ def _display_scan_results(
         border_style=border_color,
     )
     console.print(layout)
+
+    # Execute Security Scanning Engine
+    from ..config import ensure_django_setup
+    ensure_django_setup()
+    from apps.scans.services.orchestrator import ScannerOrchestrator
+    from ..remediation_workflow import run_remediation_workflow
+
+    orchestrator = ScannerOrchestrator()
+    timeout_seconds = config.get("scanners", {}).get("timeout_seconds", 60)
+    overall_status, scanner_statuses, findings, duration = orchestrator.run_scan(
+        project_path=target,
+        target_url=target_url,
+        scanners_to_run=configured_scanners,
+        timeout_seconds=timeout_seconds,
+    )
+
+    console.print(f"\n[bold cyan]Scan Execution Complete:[/bold cyan] status={overall_status} | findings={len(findings)} | duration={duration:.2f}s")
+    for s_name, s_info in scanner_statuses.items():
+        console.print(f"  • {s_name:<12}: status={s_info.get('status')} | findings={s_info.get('findings_count', 0)}")
+
+    if findings:
+        console.print(f"\n[bold yellow]Initiating Remediation Loop for {len(findings)} security finding(s)...[/bold yellow]")
+        import sys
+        resolved, discarded, unaddressed = run_remediation_workflow(
+            project_root=target,
+            findings=findings,
+            interactive=sys.stdin.isatty(),
+        )
+        console.print(
+            f"\n[bold green]Remediation Summary:[/bold green] "
+            f"Resolved: [green]{len(resolved)}[/green] | "
+            f"Discarded: [yellow]{len(discarded)}[/yellow] | "
+            f"Unaddressed: [red]{len(unaddressed)}[/red]"
+        )

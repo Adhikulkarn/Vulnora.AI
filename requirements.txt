@@ -31,6 +31,30 @@ rich>=13.7.0
 pyyaml>=6.0.1
 shellingham>=1.5.0
 click>=8.1.0
+# Core Framework
+Django
+djangorestframework
+
+# Configuration & Environment
+python-dotenv
+dj-database-url
+
+# Security & CORS
+django-cors-headers
+
+# API Documentation / Schema
+drf-spectacular
+
+# Security Scanning Tools
+bandit
+semgrep
+zaproxy
+requests
+
+# CLI & Terminal UI
+typer
+rich
+pyyaml
 
 # Packaging & Build Tooling
 setuptools>=68.0.0
