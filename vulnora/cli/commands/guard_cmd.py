@@ -2,6 +2,7 @@
 Implementation of `vulnora guard` command.
 Performs branch-aware protection checks and displays the Sentinel guard interface.
 Supports both manual terminal invocations and Git pre-push hook execution.
+Triggers the local multi-scanner engine on protected branches.
 """
 
 from pathlib import Path
@@ -20,6 +21,7 @@ from ..git_utils import (
     parse_push_refs,
 )
 from ..ui import console, print_banner, render_split_pane
+from vulnora.scanners import ScannerOrchestrator, Severity
 
 
 def guard_command(
@@ -100,7 +102,6 @@ def _handle_hook_execution(
     """Processes ref updates streamed from Git's pre-push hook via stdin."""
     raw_lines = stdin_content.strip()
     if not raw_lines:
-        # Empty push input (e.g. nothing to push)
         return
 
     updates: List[PushRefUpdate] = parse_push_refs(raw_lines)
@@ -135,8 +136,21 @@ def _handle_hook_execution(
         console.print("[dim]Vulnora Guard: Security checks skipped for unprotected branches.[/dim]")
         return
 
-    # Protected branch targeted -> Invoke Rich Sentinel Guard Interface!
+    # Protected branch targeted -> Invoke Rich Sentinel Guard Interface & Run Scanners!
     print_banner()
+
+    orchestrator = ScannerOrchestrator()
+    config = load_config(repo_root)
+    configured_scanners = config.get("scanners", {}).get("enabled", ["gitleaks", "semgrep", "bandit", "osv-scanner", "trivy"])
+
+    # Run scanners against the repository
+    target_scanners = [s for s in configured_scanners if s != "zap"]
+    overall_status, scanner_statuses, unified_findings, duration = orchestrator.run_scan(
+        project_path=repo_root,
+        scanners_to_run=target_scanners,
+        timeout_seconds=config.get("scanners", {}).get("timeout_seconds", 60),
+    )
+    sev_counts = orchestrator.calculate_severity_counts(unified_findings)
 
     log_lines = []
     log_lines.append(f"[bold cyan]Target Repository:[/bold cyan] [white]{repo_name}[/white]")
@@ -150,11 +164,17 @@ def _handle_hook_execution(
     log_lines.append(f"[red]Push targeting protected branch: [bold]{', '.join(protected_destinations)}[/bold][/red]")
     log_lines.append("[white]Policy Enforced:[/white] [bold red]ZERO CRITICAL / ZERO HIGH VULNERABILITIES[/bold red]")
     log_lines.append("")
-    log_lines.append("[bold yellow]Security Scanning Pipeline:[/bold yellow]")
-    log_lines.append("  [dim]• Multi-scanner engine (SAST, DAST, SCA, Secrets) ready for integration.[/dim]")
-    log_lines.append("  [dim]• Remote AI inference gateway ready for automated patch generation.[/dim]")
+    log_lines.append(f"[bold yellow]Security Scan Execution ({duration:.2f}s):[/bold yellow]")
+    log_lines.append(f"  [dim]• Scanners Run:[/dim] {', '.join(target_scanners)}")
+    log_lines.append(f"  [dim]• Total Findings:[/dim] [white]{len(unified_findings)} issues[/white]")
+    log_lines.append(
+        f"  • Breakdown: [bold red]Crit: {sev_counts[Severity.CRITICAL]}[/bold red] | "
+        f"[red]High: {sev_counts[Severity.HIGH]}[/red] | "
+        f"[yellow]Med: {sev_counts[Severity.MEDIUM]}[/yellow] | "
+        f"[blue]Low: {sev_counts[Severity.LOW]}[/blue]"
+    )
     log_lines.append("")
-    log_lines.append("[bold green]✔ Pre-push branch guard check passed (Phase 2 placeholder).[/bold green]")
+    log_lines.append("[bold green]✔ Pre-push branch guard check passed (Phase 3 placeholder: push permitted).[/bold green]")
 
     layout = render_split_pane(
         mascot_state="alert",
@@ -215,6 +235,27 @@ def _handle_manual_execution(
         log_lines.append(f"[red]Direct push or merge targeting protected branch '[bold]{current_branch}[/bold]'.[/red]")
         log_lines.append("[white]Policy Enforced:[/white] [bold red]ZERO CRITICAL / ZERO HIGH VULNERABILITIES[/bold red]")
         log_lines.append("[dim]Automated push guards will block any changes introducing new issues.[/dim]")
+
+        # Run scanner orchestrator against repository
+        orchestrator = ScannerOrchestrator()
+        config = load_config(target)
+        configured_scanners = config.get("scanners", {}).get("enabled", ["gitleaks", "semgrep", "bandit", "osv-scanner", "trivy"])
+        target_scanners = [s for s in configured_scanners if s != "zap"]
+        overall_status, scanner_statuses, unified_findings, duration = orchestrator.run_scan(
+            project_path=target,
+            scanners_to_run=target_scanners,
+            timeout_seconds=config.get("scanners", {}).get("timeout_seconds", 60),
+        )
+        sev_counts = orchestrator.calculate_severity_counts(unified_findings)
+        log_lines.append("")
+        log_lines.append(f"[bold yellow]Security Findings Breakdown ({duration:.2f}s):[/bold yellow]")
+        log_lines.append(
+            f"  • [bold red]Crit: {sev_counts[Severity.CRITICAL]}[/bold red] | "
+            f"[red]High: {sev_counts[Severity.HIGH]}[/red] | "
+            f"[yellow]Med: {sev_counts[Severity.MEDIUM]}[/yellow] | "
+            f"[blue]Low: {sev_counts[Severity.LOW]}[/blue] | "
+            f"[dim]Total: {len(unified_findings)}[/dim]"
+        )
     else:
         mascot_state = "guarding"
         border_color = "cyan"

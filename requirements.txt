@@ -1,26 +1,44 @@
-# Core Framework
+# ==============================================================================
+# Vulnora AI - Python Dependencies
+# Install in your virtual environment:
+#   pip install -r requirements.txt
+#   pip install -e .
+# ==============================================================================
+
+# Core Web Framework & REST API
 Django>=5.1.0,<5.2.0
 djangorestframework>=3.15.2
 
-# Configuration & Environment
+# Environment & Database Configuration
 python-dotenv>=1.0.1
 dj-database-url>=2.2.0
 
-# Security & CORS
+# Cross-Origin Resource Sharing (CORS)
 django-cors-headers>=4.4.0
 
-# API Documentation / Schema
+# OpenAPI 3.0 / Swagger Documentation
 drf-spectacular>=0.27.2
 
-# Security Scanning Tools
+# Security Scanners (Python-native libraries & APIs)
 bandit>=1.8.0
 semgrep>=1.100.0
 zaproxy>=0.6.0
 requests>=2.31.0
 
-# CLI & Terminal UI
+# CLI Engine & Rich Terminal Interface
 typer>=0.12.0
 rich>=13.7.0
 pyyaml>=6.0.1
+shellingham>=1.5.0
+click>=8.1.0
 
+# Packaging & Build Tooling
+setuptools>=68.0.0
+wheel>=0.42.0
+build>=1.0.0
 
+# Note on External Scanner Binaries:
+# - Gitleaks: https://github.com/gitleaks/gitleaks/releases
+# - OSV-Scanner: https://github.com/google/osv-scanner/releases
+# - Trivy: https://github.com/aquasecurity/trivy/releases
+# (Place them on system PATH or install via choco/brew/package manager)

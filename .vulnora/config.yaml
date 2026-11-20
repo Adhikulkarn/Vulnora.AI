@@ -25,4 +25,4 @@ ai:
   endpoint: http://localhost:11434
 backend:
   url: http://127.0.0.1:8000
-  sync_history: true
+  sync_history: false

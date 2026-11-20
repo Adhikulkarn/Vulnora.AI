@@ -1,3 +1,5 @@
+
+
 # Vulnora AI - Backend Service
 
 > **Branch-Aware CLI Security Guard with Tiered Auto-Remediation, Remote Open-Weight AI Inference, and Local Issue Memory**
@@ -181,15 +183,38 @@ git:
 
 
 #### 3. `vulnora scan`
-Prepares and executes the multi-scanner security analysis pipeline across files, dependencies, and target URLs:
+Executes local security scanners directly against your repository code, dependencies, and optional running web applications:
 
 ```powershell
+# 1. Run all available filesystem scanners against the current repository:
 vulnora scan
-# Scan a specific directory or URL:
-vulnora scan --path "C:\path\to\code" --target-url "http://127.0.0.1:8000"
-# Run specific scanners:
-vulnora scan --scanner bandit --scanner trivy
+
+# 2. Scan a specific directory:
+vulnora scan --path "C:\path\to\code"
+
+# 3. Select individual scanners:
+vulnora scan --scanner bandit --scanner gitleaks
+
+# 4. Perform DAST scanning against an explicitly provided running web application:
+vulnora scan --zap-target "http://127.0.0.1:8000" --scanner zap
+
+# 5. Export structured results to a JSON file:
+vulnora scan --output scan-results.json
+
+# 6. Stream JSON directly to stdout for CI/CD scripting:
+vulnora scan --json
+
+# 7. Optionally synchronize scan results with the central Vulnora backend:
+vulnora scan --sync
 ```
+
+##### Supported Security Scanners:
+1. **Gitleaks:** Detects committed API keys, tokens, passwords, and private secrets (with automatic redaction in all outputs).
+2. **Semgrep:** Fast multi-language SAST pattern scanning for vulnerabilities and insecure idioms.
+3. **Bandit:** Python AST static code security analysis.
+4. **OSV-Scanner:** Open-source vulnerability scanner querying the Google OSV database for dependencies.
+5. **Trivy:** Comprehensive filesystem, software bill of materials (SBOM), and IaC misconfiguration scanner.
+6. **OWASP ZAP:** Dynamic Application Security Testing (DAST) baseline scans against explicitly specified URLs.
 
 ---
 
