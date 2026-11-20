@@ -17,6 +17,9 @@ DEFAULT_CONFIG_TEMPLATE: Dict[str, Any] = {
     },
     "git": {
         "protected_branches": DEFAULT_PROTECTED_BRANCHES,
+        "pre_push_hook": {
+            "enabled": True,
+        },
         "enforce_pre_push": True,
         "block_on_critical": True,
     },
@@ -89,3 +92,19 @@ def get_protected_branches(base_path: Optional[Path] = None) -> List[str]:
     if isinstance(branches, list) and branches:
         return [str(b).strip() for b in branches if str(b).strip()]
     return list(DEFAULT_PROTECTED_BRANCHES)
+
+
+def is_pre_push_hook_enabled(base_path: Optional[Path] = None) -> bool:
+    """
+    Checks if the Git pre-push hook is enabled in .vulnora/config.yaml.
+    """
+    config = load_config(base_path)
+    git_cfg = config.get("git", {})
+    hook_cfg = git_cfg.get("pre_push_hook", {})
+    if isinstance(hook_cfg, dict):
+        return bool(hook_cfg.get("enabled", True))
+    if isinstance(hook_cfg, bool):
+        return hook_cfg
+    return True
+
+

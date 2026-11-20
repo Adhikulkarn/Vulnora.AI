@@ -9,6 +9,7 @@ import typer
 
 from ..config import DEFAULT_CONFIG_TEMPLATE, get_config_path, get_vulnora_dir, save_config
 from ..git_utils import get_git_root, is_git_repository, update_gitignore
+from ..hook_manager import install_pre_push_hook
 from ..memory import get_memory_path, init_memory
 from ..ui import console, print_banner, print_error, print_info, print_success, print_warning, render_split_pane
 
@@ -84,6 +85,13 @@ def init_command(
         else:
             log_lines.append("[cyan]ℹ .gitignore already up to date.[/cyan]")
 
+        # 6. Install Git Pre-Push Hook
+        hook_success, hook_msg = install_pre_push_hook(git_root, force=force)
+        if hook_success:
+            log_lines.append(f"[green]✔ Git Pre-Push Hook:[/green] [white]{hook_msg}[/white]")
+        else:
+            log_lines.append(f"[yellow]▲ Git Pre-Push Hook:[/yellow] [yellow]{hook_msg}[/yellow]")
+
     log_lines.append("")
     log_lines.append("[bold green]Vulnora AI initialization complete![/bold green]")
     log_lines.append("[dim]Run 'vulnora guard' to inspect branch protection status.[/dim]")
@@ -98,3 +106,4 @@ def init_command(
         border_style="green",
     )
     console.print(layout)
+
