@@ -14,7 +14,7 @@ import json
 import os
 from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from vulnora.core.config import get_vulnora_dir
 from vulnora.core.models import Finding, ImmuneMatch, ImmuneRecord, ImmunityMetrics, ImmunityTier, Severity
@@ -89,11 +89,14 @@ class ImmuneMemoryStore:
         language: Optional[str] = None,
         agents_rule: str = "",
         metadata: Optional[Dict[str, Any]] = None,
+        on_log: Optional[Callable[[str], None]] = None,
     ) -> ImmuneRecord:
         """
         Normalizes finding AST, constructs an anonymized antibody, and persists to local memory.
         """
         lang = language or ASTNormalizer.detect_language(finding.file_path)
+        if on_log:
+            on_log(f"[bold cyan][IMMUNE][/bold cyan] Normalizing AST to store antibody for [{finding.rule_id}] in {lang}...")
         normalized = self.normalizer.normalize(code_snippet, language=lang)
 
         record_id = f"ab_{finding.rule_id}_{normalized.exact_hash[:12]}"
@@ -120,6 +123,8 @@ class ImmuneMemoryStore:
         self._hash_index[record.exact_hash] = record
 
         self._save()
+        if on_log:
+            on_log(f"[bold green][IMMUNE][/bold green] Committed antibody [bold]{record.id}[/bold] to Immune Memory.")
         return record
 
     def save_record(self, record: ImmuneRecord) -> None:
@@ -134,6 +139,7 @@ class ImmuneMemoryStore:
         finding: Finding,
         code_snippet: Optional[str] = None,
         language: Optional[str] = None,
+        on_log: Optional[Callable[[str], None]] = None,
     ) -> ImmuneMatch:
         """
         Performs 3-Tier local immune lookup:
@@ -145,13 +151,20 @@ class ImmuneMemoryStore:
         lang = language or ASTNormalizer.detect_language(finding.file_path)
         snippet = code_snippet or finding.snippet or ""
 
+        if on_log:
+            on_log(f"[bold cyan][IMMUNE][/bold cyan] AST normalizing code for [{finding.rule_id}] in {Path(finding.file_path).name} ({lang})...")
+
         normalized = self.normalizer.normalize(snippet, language=lang)
+        if on_log:
+            on_log(f"[dim][IMMUNE][/dim] AST normalized (exact_hash: {normalized.exact_hash[:12]}...). Scanning memory tiers...")
 
         # 1. Tier 1: Exact Hash Match
         if normalized.exact_hash in self._hash_index:
             rec = self._hash_index[normalized.exact_hash]
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             self._metrics.tier1_hits += 1
+            if on_log:
+                on_log(f"[bold green][HIT][/bold green] Tier 1 Exact Hash match in {duration_ms:.2f}ms: Reusing antibody {rec.id}.")
             return ImmuneMatch(
                 matched=True,
                 tier=ImmunityTier.TIER_1_EXACT,
@@ -182,6 +195,11 @@ class ImmuneMemoryStore:
         if best_record and best_score >= 0.85:
             # Tier 2: Structural variant (renamed variables)
             self._metrics.tier2_hits += 1
+            if on_log:
+                on_log(
+                    f"[bold green][HIT][/bold green] Tier 2 Structural AST variant match in {duration_ms:.2f}ms "
+                    f"({best_score:.1%} similarity) with antibody {best_record.id}."
+                )
             return ImmuneMatch(
                 matched=True,
                 tier=ImmunityTier.TIER_2_STRUCTURAL,
@@ -193,6 +211,11 @@ class ImmuneMemoryStore:
         elif best_record and best_score >= 0.50:
             # Tier 3: Partial match
             self._metrics.tier3_hits += 1
+            if on_log:
+                on_log(
+                    f"[bold yellow][HIT][/bold yellow] Tier 3 Partial AST match in {duration_ms:.2f}ms "
+                    f"({best_score:.1%} similarity) with antibody {best_record.id}."
+                )
             return ImmuneMatch(
                 matched=True,
                 tier=ImmunityTier.TIER_3_PARTIAL,
@@ -204,6 +227,8 @@ class ImmuneMemoryStore:
 
         # No Match
         self._metrics.misses += 1
+        if on_log:
+            on_log(f"[dim][MISS][/dim] Immune Memory miss in {duration_ms:.2f}ms: No antibody matched {finding.rule_id}.")
         return ImmuneMatch(
             matched=False,
             tier=ImmunityTier.NO_MATCH,

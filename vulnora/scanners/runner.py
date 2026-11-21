@@ -11,7 +11,7 @@ from __future__ import annotations
 import concurrent.futures
 from pathlib import Path
 import time
-from typing import Dict, List, Optional, Sequence, Type
+from typing import Callable, Dict, List, Optional, Sequence, Type
 
 from vulnora.core.config import VulnoraConfig, load_config
 from vulnora.core.models import Finding, OrchestratorResult, ScannerResult, ScanStatus
@@ -82,6 +82,7 @@ class ScannerOrchestrator:
         target_url: Optional[str] = None,
         requested_scanners: Optional[Sequence[str]] = None,
         timeout_seconds: Optional[int] = None,
+        on_log: Optional[Callable[[str], None]] = None,
     ) -> OrchestratorResult:
         """
         Executes all active scanners concurrently within a ThreadPoolExecutor.
@@ -101,6 +102,8 @@ class ScannerOrchestrator:
 
         active_scanners = self.get_enabled_scanners(requested=requested_scanners)
         if not active_scanners:
+            if on_log:
+                on_log("[dim][SCAN][/dim] No active scanners configured or enabled. Scan complete.")
             return OrchestratorResult(
                 target_path=str(path),
                 duration_seconds=0.0,
@@ -108,13 +111,41 @@ class ScannerOrchestrator:
                 is_full_scan=is_full_scan,
             )
 
+        target_files = context.get_target_files()
+        if on_log:
+            mode_desc = "full repository scan" if is_full_scan else f"diff-scoped ({len(changed_files or [])} changed file(s))"
+            on_log(f"[bold cyan][SCAN][/bold cyan] Starting detection pipeline on [bold]{path.name}[/bold] ({mode_desc}).")
+            on_log(f"[cyan][SCAN][/cyan] Targeted {len(target_files)} eligible file(s) across {len(active_scanners)} scanner(s).")
+
         start_time = time.perf_counter()
         results: List[ScannerResult] = []
+
+        def _execute_scanner(scanner: BaseScanner) -> ScannerResult:
+            if on_log:
+                on_log(f"[bold yellow][START][/bold yellow] Scanner [bold]{scanner.scanner_name}[/bold] executing...")
+            res = scanner.scan(context)
+            if on_log:
+                if res.status == ScanStatus.COMPLETED:
+                    on_log(
+                        f"[bold green][DONE][/bold green] Scanner [bold]{res.scanner_name}[/bold] finished in "
+                        f"{res.duration_seconds:.2f}s ({len(res.findings)} finding(s))."
+                    )
+                elif res.status in (ScanStatus.SKIPPED, ScanStatus.NOT_INSTALLED):
+                    on_log(
+                        f"[dim][SKIP][/dim] Scanner [bold]{res.scanner_name}[/bold] skipped: "
+                        f"{res.error_message or res.status.value}"
+                    )
+                else:
+                    on_log(
+                        f"[bold red][ERROR][/bold red] Scanner [bold]{res.scanner_name}[/bold] "
+                        f"{res.status.value}: {res.error_message or 'Failure'}"
+                    )
+            return res
 
         # Execute scanners concurrently
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(active_scanners), self.max_workers)) as executor:
             future_to_scanner = {
-                executor.submit(scanner.scan, context): scanner
+                executor.submit(_execute_scanner, scanner): scanner
                 for scanner in active_scanners
             }
 
@@ -124,6 +155,8 @@ class ScannerOrchestrator:
                     res = future.result()
                     results.append(res)
                 except Exception as exc:
+                    if on_log:
+                        on_log(f"[bold red][ERROR][/bold red] Scanner [bold]{scanner.scanner_name}[/bold] worker exception: {exc}")
                     # Defensive fallback: worker crash should never crash orchestrator
                     results.append(
                         ScannerResult(
@@ -151,6 +184,12 @@ class ScannerOrchestrator:
 
         # Deduplicate findings across overlapping scanners
         deduplicated_findings = self._deduplicate_findings(results)
+
+        if on_log:
+            on_log(
+                f"[bold cyan][DEDUP][/bold cyan] Deduplication complete: {len(deduplicated_findings)} unique finding(s) "
+                f"retained across {len(scanners_run)} completed scanner(s) ({total_duration:.2f}s total)."
+            )
 
         return OrchestratorResult(
             target_path=str(path),

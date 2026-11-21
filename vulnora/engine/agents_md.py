@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 from vulnora.core.models import AgentRule
 
@@ -36,7 +36,7 @@ class AgentsMDWriter:
         self.file_path = self.repo_root / agents_filename
         self.max_lines_budget = max_lines_budget
 
-    def add_rule(self, rule: AgentRule) -> bool:
+    def add_rule(self, rule: AgentRule, on_log: Optional[Callable[[str], None]] = None) -> bool:
         """
         Appends or updates a preventative security rule in AGENTS.md.
         Deduplicates by rule_id and enforces line budget.
@@ -56,14 +56,22 @@ class AgentsMDWriter:
 
         if found_idx >= 0:
             # Update existing rule with newer instruction if different
+            if on_log:
+                on_log(f"[bold cyan][AGENTS][/bold cyan] Updating existing guardrail rule for [{rule.rule_id}].")
             existing_rules[found_idx] = rule
         else:
+            if on_log:
+                on_log(f"[bold cyan][AGENTS][/bold cyan] Appending new guardrail rule for [{rule.rule_id}] in {rule.language.capitalize()} section.")
             existing_rules.append(rule)
 
         # Enforce budget by pruning oldest low-severity rules if needed
         pruned_rules = self._enforce_budget(existing_rules)
+        if len(pruned_rules) < len(existing_rules) and on_log:
+            on_log(f"[dim][AGENTS][/dim] Enforced {self.max_lines_budget}-line budget (pruned {len(existing_rules) - len(pruned_rules)} rule(s)).")
 
         self._save_rules(pruned_rules)
+        if on_log:
+            on_log(f"[bold green][AGENTS][/bold green] AGENTS.md successfully updated and saved ({len(pruned_rules)} active rules).")
         return True
 
     def load_rules(self) -> List[AgentRule]:

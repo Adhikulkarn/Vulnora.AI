@@ -16,7 +16,7 @@ import difflib
 import os
 from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from vulnora.core.config import VulnoraConfig, load_config
 from vulnora.core.models import AgentRule, Finding, ImmuneRecord, RemediationProposal, Severity, VerificationResult
@@ -61,6 +61,7 @@ class FixVerifier:
         finding: Finding,
         proposal: RemediationProposal,
         auto_rollback: bool = True,
+        on_log: Optional[Callable[[str], None]] = None,
     ) -> VerificationResult:
         """
         Applies patch, runs targeted single-scanner re-scan, commits to Immune Memory
@@ -71,6 +72,8 @@ class FixVerifier:
         target_file = (self.target_root / file_path_str).resolve()
 
         if not target_file.is_file():
+            if on_log:
+                on_log(f"[bold red][VERIFY ERROR][/bold red] Target file does not exist: {target_file}")
             return VerificationResult(
                 success=False,
                 file_path=file_path_str,
@@ -82,6 +85,9 @@ class FixVerifier:
         original_content = target_file.read_text(encoding="utf-8", errors="replace")
 
         # Step 1: Apply replacement into the file
+        if on_log:
+            on_log(f"[bold cyan][VERIFY][/bold cyan] Applying surgical patch to [bold]{file_path_str}[/bold]...")
+
         replacement = proposal.replacement_code
         original_snippet = proposal.original_code or finding.snippet
 
@@ -96,6 +102,8 @@ class FixVerifier:
                 patched_content = self._apply_fuzzy_replacement(original_content, original_snippet, replacement)
 
             if patched_content == original_content and replacement != original_snippet:
+                if on_log:
+                    on_log(f"[bold red][VERIFY ERROR][/bold red] Could not locate snippet to replace in {file_path_str}.")
                 return VerificationResult(
                     success=False,
                     file_path=file_path_str,
@@ -117,8 +125,16 @@ class FixVerifier:
             )
         )
         unified_diff = "".join(diff_lines)
+        if on_log:
+            on_log(f"[cyan][VERIFY][/cyan] Patch written to {Path(file_path_str).name} ({len(diff_lines)} unified diff lines).")
 
         # Step 2: Re-run ONLY the flagging scanner on this single file
+        if on_log:
+            on_log(
+                f"[bold yellow][VERIFY][/bold yellow] Initiating single-file verification rescan: "
+                f"re-running [bold]{finding.scanner_name}[/bold] on {Path(file_path_str).name}..."
+            )
+
         orchestrator = ScannerOrchestrator(config=self.config)
         scan_result = orchestrator.run_scanners(
             target_path=self.target_root,
@@ -126,6 +142,7 @@ class FixVerifier:
             changed_files=[target_file],
             requested_scanners=[finding.scanner_name],
             timeout_seconds=20,
+            on_log=on_log,
         )
 
         # Check if the specific finding/rule still appears in scanner findings
@@ -145,6 +162,8 @@ class FixVerifier:
         if scanner_res and str(scanner_res.status) == "NOT_INSTALLED":
             if auto_rollback:
                 target_file.write_text(original_content, encoding="utf-8")
+                if on_log:
+                    on_log(f"[bold red][!][/bold red] Scanner '{finding.scanner_name}' not installed. Reverted patch.")
             return VerificationResult(
                 success=False,
                 file_path=file_path_str,
@@ -160,6 +179,11 @@ class FixVerifier:
         if remaining_flags:
             if auto_rollback:
                 target_file.write_text(original_content, encoding="utf-8")
+                if on_log:
+                    on_log(
+                        f"[bold red][!][/bold red] Verification failed: {finding.scanner_name} still flagged "
+                        f"{len(remaining_flags)} finding(s). Auto-rollback executed."
+                    )
             return VerificationResult(
                 success=False,
                 file_path=file_path_str,
@@ -172,6 +196,12 @@ class FixVerifier:
             )
 
         # Step 4: Verification Succeeded! Commit to Immune Memory and AGENTS.md
+        if on_log:
+            on_log(
+                f"[bold green][✔][/bold green] Single-file verification clean: {finding.scanner_name} "
+                f"confirmed 0 findings remaining for {finding.rule_id}."
+            )
+
         language = self.normalizer.detect_language(file_path_str)
         snippet_for_ast = original_snippet or finding.snippet or "vulnerability"
 
@@ -185,6 +215,7 @@ class FixVerifier:
                 "verified_patch": unified_diff,
                 "verified_at": datetime.now(timezone.utc).isoformat(),
             },
+            on_log=on_log,
         )
 
         rule_added = False
@@ -195,7 +226,7 @@ class FixVerifier:
                 rule_text=proposal.agents_rule,
                 severity=finding.severity.value,
             )
-            rule_added = self.agents_writer.add_rule(rule_obj)
+            rule_added = self.agents_writer.add_rule(rule_obj, on_log=on_log)
 
         return VerificationResult(
             success=True,

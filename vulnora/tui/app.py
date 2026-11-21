@@ -13,17 +13,19 @@ Provides the responsive, keyboard-driven terminal dashboard:
 
 from __future__ import annotations
 
+from datetime import datetime
 import difflib
 import os
 from pathlib import Path
 import sys
+import threading
 from typing import Any, Dict, List, Optional, Set
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Footer, Header, RichLog, Static
 
 from vulnora.core.config import (
     VulnoraConfig,
@@ -205,10 +207,62 @@ class VulnoraTUIApp(App[int]):
     def on_mount(self) -> None:
         """Called when TUI widgets are mounted into the terminal."""
         self._refresh_metrics()
-        if self.initial_findings is not None:
+        from vulnora.scanners.installer import get_missing_standalone_scanners
+        missing = get_missing_standalone_scanners()
+        if missing and self.initial_findings is None and self.auto_scan_on_mount and not os.getenv("VULNORA_NO_DOWNLOAD"):
+            self.mascot_panel.set_state("SCANNING", "Bootstrapping missing scanners...")
+            self.details_tabs.switch_tab("tab-logs")
+            self._append_log(f"[bold yellow][BOOTSTRAP][/bold yellow] Missing scanner binaries detected: {', '.join(missing)}")
+            self.run_background_bootstrap()
+        elif self.initial_findings is not None:
             self.findings_view.set_findings(self.initial_findings)
             self._update_mascot_for_findings(self.initial_findings)
         elif self.auto_scan_on_mount:
+            self.action_rescan()
+
+    def _append_log(self, message: str) -> None:
+        """
+        Thread-safe logger method that streams timestamped Rich-markup logs to the Activity Logs tab.
+        Uses self.call_from_thread(...) when invoked from worker threads so UI updates never block.
+        """
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted = f"[dim]{timestamp}[/dim] {message}"
+
+        def _write() -> None:
+            try:
+                log_widget = self.query_one("#activity-log", RichLog)
+                log_widget.write(formatted)
+                if hasattr(self.details_tabs, "log_lines"):
+                    self.details_tabs.log_lines.append(formatted)
+            except Exception:
+                pass
+
+        try:
+            if hasattr(self, "_thread_id") and threading.get_ident() == self._thread_id:
+                _write()
+            else:
+                self.call_from_thread(_write)
+        except Exception:
+            try:
+                self.call_from_thread(_write)
+            except Exception:
+                _write()
+
+    @work(thread=True)
+    def run_background_bootstrap(self) -> None:
+        """Bootstraps missing standalone scanner binaries in background thread."""
+        try:
+            from vulnora.scanners.installer import install_missing_scanners
+            install_missing_scanners(on_log=self._append_log)
+            self.call_from_thread(self._on_bootstrap_completed)
+        except Exception as exc:
+            self._append_log(f"[bold red][BOOTSTRAP ERROR][/bold red] {exc}")
+            self.call_from_thread(self._on_bootstrap_completed)
+
+    def _on_bootstrap_completed(self) -> None:
+        self._append_log("[bold green][BOOTSTRAP][/bold green] Scanner verification and bootstrap complete.")
+        self._refresh_metrics()
+        if self.auto_scan_on_mount and self.initial_findings is None:
             self.action_rescan()
 
     def store_remediation(
@@ -338,12 +392,16 @@ class VulnoraTUIApp(App[int]):
     def _execute_auto_fix(self, finding: Finding) -> None:
         """Begins remediation synthesis for finding."""
         self.mascot_panel.set_state("REMEDIATING", f"Synthesizing surgical patch for {finding.rule_id}...")
+        self.details_tabs.switch_tab("tab-logs")
+        self._append_log(f"[bold magenta][REMEDIATE][/bold magenta] Starting auto-fix for [{finding.rule_id}] in {finding.file_path}...")
         self.set_status(f"[*] Invoking Cloud AI remediation for {finding.rule_id}...")
         self.run_background_fix(finding)
 
     def action_rescan(self) -> None:
         """[R] Triggers background multi-scanner execution."""
         self.mascot_panel.set_state("SCANNING", "Running 6 concurrent scanners...")
+        self.details_tabs.switch_tab("tab-logs")
+        self._append_log("[bold yellow][SCAN][/bold yellow] Starting multi-scanner detection pipeline...")
         self.set_status("[*] Re-scanning repository with concurrent scanners...")
         self.run_background_scan()
 
@@ -396,6 +454,7 @@ class VulnoraTUIApp(App[int]):
             result = orchestrator.run_scanners(
                 target_path=self.target_dir,
                 is_full_scan=not self.is_guard_mode,
+                on_log=self._append_log,
             )
             findings = result.findings
             self.call_from_thread(self._on_scan_completed, findings, None)
@@ -407,12 +466,19 @@ class VulnoraTUIApp(App[int]):
         if error:
             self.mascot_panel.set_state("ALERT", f"Scan error: {error}")
             self.set_status(f"[-] Scan encountered an error: {error}")
+            self._append_log(f"[bold red][SCAN ERROR][/bold red] {error}")
             return
 
-        self.findings_view.set_findings(findings)
+        self.findings_view.set_findings(findings, select_first=True)
         self._update_mascot_for_findings(findings)
         self._refresh_metrics()
         self.set_status(f"[✔] Scan complete: {len(findings)} finding(s) detected.")
+
+        if findings:
+            self.details_tabs.switch_tab("tab-snippet")
+        else:
+            self.details_tabs.switch_tab("tab-logs")
+            self._append_log("[bold green][SCAN][/bold green] 0 vulnerabilities detected. Codebase is clean!")
 
     @work(thread=True)
     def run_background_fix(self, finding: Finding) -> None:
@@ -431,7 +497,7 @@ class VulnoraTUIApp(App[int]):
                     pass
 
             proposal: Optional[RemediationProposal] = None
-            match = self.memory_store.query(finding, code_snippet=code_snippet)
+            match = self.memory_store.query(finding, code_snippet=code_snippet, on_log=self._append_log)
             if match and match.record and match.confidence >= 0.85:
                 antibody = match.record
                 proposal = RemediationProposal(
@@ -456,14 +522,23 @@ class VulnoraTUIApp(App[int]):
                 from vulnora.engine.prompt_compiler import SurgicalPromptCompiler
                 compiler = SurgicalPromptCompiler(target_root=self.target_dir, immune_store=self.memory_store)
                 prompt = compiler.compile(finding)
-                proposal = client.generate_remediation(prompt)
+                proposal = client.generate_remediation(prompt, on_log=self._append_log)
+
+            def _update_mascot_verifying():
+                self.mascot_panel.set_state("REMEDIATING", f"VERIFYING patch with {finding.scanner_name}...")
+            self.call_from_thread(_update_mascot_verifying)
 
             verifier = FixVerifier(
                 target_root=self.target_dir,
                 config=self.config,
                 immune_store=self.memory_store,
             )
-            res = verifier.verify_and_learn(finding=finding, proposal=proposal, auto_rollback=True)
+            res = verifier.verify_and_learn(
+                finding=finding,
+                proposal=proposal,
+                auto_rollback=True,
+                on_log=self._append_log,
+            )
             self.call_from_thread(self._on_fix_completed, finding, proposal, res, None)
         except Exception as exc:
             self.call_from_thread(self._on_fix_completed, finding, None, None, str(exc))
@@ -479,6 +554,7 @@ class VulnoraTUIApp(App[int]):
         if error:
             self.mascot_panel.set_state("ALERT", f"Remediation failed: {error[:60]}")
             self.set_status(f"[-] Remediation failed: {error}")
+            self._append_log(f"[bold red][REMEDIATION ERROR][/bold red] {error}")
             self.notify(f"Remediation error: {error}", severity="error")
             return
 
@@ -524,11 +600,13 @@ class VulnoraTUIApp(App[int]):
             # 5. Refresh metrics & status
             self._refresh_metrics()
             self.set_status(f"[✔] Verified clean: Antibody {res.antibody_id} saved to memory.")
+            self._append_log(f"[bold green][VACCINATED][/bold green] Successfully verified and learned antibody {res.antibody_id} for {finding.rule_id}.")
             self.notify(f"Vaccinated {finding.rule_id}! Verified clean.", severity="information")
         else:
             msg = res.message if res else "Verification failed"
             self.mascot_panel.set_state("ALERT", f"Verification rolled back: {msg}")
             self.set_status(f"[!] Fix rolled back: {msg}")
+            self._append_log(f"[bold yellow][REVERTED][/bold yellow] Fix rolled back: {msg}")
             self.notify(f"Patch verification failed: {msg}", severity="warning")
 
     # -------------------------------------------------------------------------

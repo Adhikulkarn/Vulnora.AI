@@ -25,7 +25,7 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Input, Label, ListItem, ListView, Static, TabbedContent, TabPane
+from textual.widgets import Button, Input, Label, ListItem, ListView, RichLog, Static, TabbedContent, TabPane
 
 from vulnora.core.models import Finding, RemediationProposal, Severity
 from vulnora.engine.prompt_compiler import SurgicalPromptCompiler
@@ -352,11 +352,13 @@ class CodeDiffTabs(Widget):
         self.prompt_text: str = "Surgical prompt will appear here."
         self.diff_text: str = "No remediation generated yet. Press [A] to trigger Cloud AI auto-fix."
         self.rule_text: str = "Guardrail rules will appear upon vaccination."
+        self.log_lines: List[str] = []
 
         self._snippet_display = Static(self.snippet_text, id="tab-snippet-text")
         self._prompt_display = Static(self.prompt_text, id="tab-prompt-text")
         self._diff_display = Static(self.diff_text, id="tab-diff-text")
         self._rule_display = Static(self.rule_text, id="tab-rule-text")
+        self.activity_log = RichLog(id="activity-log", highlight=True, markup=True, wrap=True)
         self._tabbed_content: Optional[TabbedContent] = None
 
     def compose(self):
@@ -373,6 +375,8 @@ class CodeDiffTabs(Widget):
             with TabPane("Guardrail Rule", id="tab-rule"):
                 with VerticalScroll():
                     yield self._rule_display
+            with TabPane("Activity Logs", id="tab-logs"):
+                yield self.activity_log
 
     def on_mount(self) -> None:
         self._tabbed_content = self.query_one("#tabs-container", TabbedContent)
@@ -393,7 +397,7 @@ class CodeDiffTabs(Widget):
         """Cycles to the next tab pane."""
         if not self._tabbed_content:
             return
-        tabs = ["tab-snippet", "tab-prompt", "tab-diff", "tab-rule"]
+        tabs = ["tab-snippet", "tab-prompt", "tab-diff", "tab-rule", "tab-logs"]
         current = self._tabbed_content.active
         try:
             curr_idx = tabs.index(current)
@@ -596,6 +600,8 @@ class CodeDiffTabs(Widget):
             text = self.diff_text
         elif active_tab == "tab-rule":
             text = self.rule_text
+        elif active_tab == "tab-logs":
+            text = "\n".join(self.log_lines) if self.log_lines else "Activity Logs: (No logs recorded)"
         else:
             text = self.snippet_text
 

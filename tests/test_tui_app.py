@@ -81,6 +81,9 @@ async def test_tui_details_tab_toggle(sample_findings, tmp_path: Path):
         assert app.details_tabs._tabbed_content.active == "tab-rule"
 
         await pilot.press("d")
+        assert app.details_tabs._tabbed_content.active == "tab-logs"
+
+        await pilot.press("d")
         assert app.details_tabs._tabbed_content.active == "tab-snippet"
 
 

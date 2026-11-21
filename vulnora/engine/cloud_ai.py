@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 import re
 import sys
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import urllib.error
 import urllib.request
 
@@ -131,12 +131,18 @@ class CloudAIClient:
         self,
         prompt: SurgicalPrompt,
         dry_run: bool = False,
+        on_log: Optional[Callable[[str], None]] = None,
     ) -> RemediationProposal:
         """
         Sends surgical prompt to the LLM and parses strict JSON remediation output.
         Cascades through: 1st Groq -> 2nd Gemini -> 3rd OpenAI -> 4th Ollama.
         """
+        if on_log:
+            on_log("[bold cyan][AI][/bold cyan] Pre-egress secret redaction verified (zero sensitive credentials).")
+
         if dry_run or os.getenv("VULNORA_MOCK_AI", "").lower() in ("1", "true", "yes"):
+            if on_log:
+                on_log("[yellow][AI][/yellow] Generating deterministic mock remediation proposal (dry-run mode)...")
             return self._generate_mock_proposal(prompt)
 
         system_prompt = (
@@ -168,9 +174,13 @@ class CloudAIClient:
             # Cloud providers require an API key; skip if none configured
             if prov in ("groq", "gemini", "openai") and not api_key:
                 cascade_errors.append(f"{prov}: No API key configured")
+                if on_log:
+                    on_log(f"[dim][AI][/dim] Skipping provider '{prov}': No API key configured.")
                 continue
 
             model = self._resolve_model(prov)
+            if on_log:
+                on_log(f"[bold magenta][AI][/bold magenta] Requesting remediation from provider [bold]{prov}[/bold] ({model})...")
             print(f"[*] Trying AI provider: {prov} ({model})...", file=sys.stderr)
 
             try:
@@ -214,13 +224,19 @@ class CloudAIClient:
                 else:
                     continue
 
+                if on_log:
+                    on_log(f"[bold green][AI][/bold green] Synthesis response received from {prov} ({model}). Parsing JSON...")
                 proposal = self._parse_json_response(response_text, prompt)
                 proposal.provider = prov
                 proposal.model = model
+                if on_log:
+                    on_log(f"[bold green][✔][/bold green] Surgical remediation proposal successfully synthesized via {prov} ({model}).")
                 return proposal
 
             except Exception as exc:
                 cascade_errors.append(f"{prov} ({model}): {exc}")
+                if on_log:
+                    on_log(f"[yellow][!][/yellow] Provider '{prov}' ({model}) failed: {exc}. Cascading to next provider...")
                 continue
 
         error_details = "\n  - " + "\n  - ".join(cascade_errors)

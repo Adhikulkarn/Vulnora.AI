@@ -17,6 +17,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from vulnora.core.models import Finding, ScannerResult, ScanStatus, Severity
+from vulnora.scanners.installer import get_extended_path
 
 
 @dataclass
@@ -120,7 +121,7 @@ class BaseScanner(ABC):
         """Checks if the scanner binary is installed and executable in PATH."""
         if not self.executable:
             return False
-        return shutil.which(self.executable) is not None
+        return shutil.which(self.executable, path=get_extended_path()) is not None
 
     def should_run(self, context: ScanContext) -> bool:
         """
@@ -148,13 +149,19 @@ class BaseScanner(ABC):
             raise TypeError(f"Command arguments must be a sequence of strings, got {type(cmd).__name__}")
 
         run_env = os.environ.copy()
+        run_env["PATH"] = get_extended_path()
         if env:
             run_env.update(env)
 
         effective_cwd = cwd or Path.cwd()
+        cmd_list = list(cmd)
+        if cmd_list:
+            resolved = shutil.which(cmd_list[0], path=run_env.get("PATH"))
+            if resolved:
+                cmd_list[0] = resolved
 
         return subprocess.run(
-            list(cmd),
+            cmd_list,
             shell=False,
             timeout=timeout,
             capture_output=True,

@@ -78,6 +78,28 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip installing the Git pre-push hook.",
     )
+    init_parser.add_argument(
+        "--no-download",
+        action="store_true",
+        help="Skip automatic download of missing scanner binaries.",
+    )
+
+    # Command: setup (Scanner Binary Verification & Bootstrapper)
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Install and verify all required security scanners (bandit, semgrep, gitleaks, osv-scanner, trivy).",
+    )
+    setup_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Force re-download and re-install of standalone scanner binaries.",
+    )
+    setup_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output scanner verification details in JSON format.",
+    )
 
     # Command: status
     status_parser = subparsers.add_parser(
@@ -471,8 +493,63 @@ def handle_init(args: argparse.Namespace) -> int:
         else:
             print("[*] Target is not a Git repository; skipping pre-push hook installation.")
 
+    # Step 5: Verify and bootstrap scanner binaries
+    if not getattr(args, "no_download", False):
+        print("\n[*] Checking security scanner binaries...")
+        from vulnora.scanners.installer import install_missing_scanners
+        install_missing_scanners(on_log=print)
+
     print("\n[✔] Vulnora initialization complete!")
     return 0
+
+
+def handle_setup(args: argparse.Namespace) -> int:
+    """Handles `vulnora setup` command: install and verify all scanner binaries."""
+    from vulnora.scanners.installer import (
+        get_vulnora_bin_dir,
+        install_missing_scanners,
+        verify_all_scanners,
+    )
+    is_json = getattr(args, "json", False)
+    if not is_json:
+        print("=" * 65)
+        print(" Vulnora AI Security Scanner Setup & Verification")
+        print("=" * 65)
+        print(f" Binaries Directory: {get_vulnora_bin_dir()}")
+        print("-" * 65)
+
+    install_missing_scanners(
+        on_log=None if is_json else print,
+        force=getattr(args, "force", False),
+    )
+
+    statuses = verify_all_scanners()
+    all_required_present = all(
+        info["installed"] for info in statuses.values() if info.get("required", True)
+    )
+
+    if is_json:
+        out = {
+            "bin_dir": str(get_vulnora_bin_dir()),
+            "all_required_installed": all_required_present,
+            "scanners": statuses,
+        }
+        print(json.dumps(out, indent=2))
+        return 0 if all_required_present else 1
+
+    print("-" * 65)
+    print(" Scanner Verification Status:")
+    for name, info in statuses.items():
+        status_icon = "[✔]" if info["installed"] else ("[-]" if not info["required"] else "[!]")
+        path_str = f" ({info['path']})" if info["path"] else " (Not found)"
+        print(f"   {status_icon} {name.ljust(13)}: {'Installed' if info['installed'] else 'Missing'}{path_str}")
+
+    print("=" * 65)
+    if all_required_present:
+        print("[✔] All required scanners are ready!")
+    else:
+        print("[!] Some scanners are missing. Check above for details.")
+    return 0 if all_required_present else 1
 
 
 def handle_status(args: argparse.Namespace) -> int:
@@ -1046,7 +1123,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.print_help()
         return 0
 
-    if args.command == "init":
+    elif args.command == "setup":
+        return handle_setup(args)
+    elif args.command == "init":
         return handle_init(args)
     elif args.command in ("status", "check-git"):
         return handle_status(args)

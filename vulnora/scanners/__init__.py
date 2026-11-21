@@ -13,6 +13,16 @@ Provides multi-scanner adapters and concurrent orchestration:
 from vulnora.scanners.bandit import BanditScanner
 from vulnora.scanners.base import BaseScanner, ScanContext
 from vulnora.scanners.gitleaks import GitleaksScanner
+from vulnora.scanners.installer import (
+    get_extended_path,
+    get_missing_scanners,
+    get_missing_standalone_scanners,
+    get_vulnora_bin_dir,
+    install_missing_scanners,
+    install_scanner,
+    is_binary_installed,
+    verify_all_scanners,
+)
 from vulnora.scanners.osv_scanner import OSVScanner
 from vulnora.scanners.runner import SCANNER_REGISTRY, ScannerOrchestrator
 from vulnora.scanners.semgrep import SemgrepScanner
@@ -30,4 +40,12 @@ __all__ = [
     "OSVScanner",
     "TrivyScanner",
     "ZAPScanner",
+    "get_vulnora_bin_dir",
+    "get_extended_path",
+    "is_binary_installed",
+    "get_missing_scanners",
+    "get_missing_standalone_scanners",
+    "install_scanner",
+    "install_missing_scanners",
+    "verify_all_scanners",
 ]
