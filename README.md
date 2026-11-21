@@ -44,17 +44,17 @@ flowchart TD
 
 ### Option 1: One-Command Global Install via `pipx` (Recommended)
 ```bash
-pipx install git+https://github.com/Aditya-S-0/Vulnora.AI.git
+pip install git+https://github.com/Adhikulkarn/Vulnora.AI.git
 ```
 
 ### Option 2: Fast Install via `uv`
 ```bash
-uv tool install git+https://github.com/Aditya-S-0/Vulnora.AI.git
+uv tool install git+https://github.com/Adhikulkarn/Vulnora.AI.git
 ```
 
 ### Option 3: From Source (Development)
 ```bash
-git clone https://github.com/Aditya-S-0/Vulnora.AI.git
+git clone https://github.com/Adhikulkarn/Vulnora.AI.git
 cd Vulnora.AI
 python -m venv venv
 source venv/bin/activate
