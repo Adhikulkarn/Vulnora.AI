@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from vulnora.core.config import VulnoraConfig
-from vulnora.core.models import Finding, Severity
+from vulnora.core.models import Finding, RemediationProposal, Severity, VerificationResult
 from vulnora.tui.app import VulnoraTUIApp
 
 
@@ -157,3 +157,92 @@ async def test_tui_quit_clean(tmp_path: Path):
     async with app.run_test() as pilot:
         await pilot.press("q")
         assert app.exit_code == 0
+
+
+@pytest.mark.anyio
+async def test_tui_remediation_storage_and_tab_switch(sample_findings, tmp_path: Path):
+    """Verifies that successful remediation stores diff + explanation, switches tab, and preserves it on selection."""
+    app = VulnoraTUIApp(
+        target_dir=tmp_path,
+        findings=sample_findings,
+        auto_scan_on_mount=False,
+    )
+
+    finding = sample_findings[0]
+    proposal = RemediationProposal(
+        finding_id="f-001",
+        rule_id="B605",
+        file_path="service.py",
+        root_cause="Use of shell string execution",
+        explanation="Safely parse command args with shlex",
+        replacement_code="subprocess.run(['backup'], shell=False)",
+        agents_rule="Always use subprocess.run with shell=False.",
+        provider="gemini",
+        model="gemini-2.5-flash",
+    )
+    diff_text = (
+        "--- a/service.py\n"
+        "+++ b/service.py\n"
+        "@@ -10,1 +10,1 @@\n"
+        "-os.system('backup')\n"
+        "+subprocess.run(['backup'], shell=False)\n"
+    )
+    res = VerificationResult(
+        success=True,
+        file_path="service.py",
+        scanner_name="bandit",
+        rule_id="B605",
+        diff_unified=diff_text,
+        antibody_id="ab_B605_test123",
+        message="Verified clean.",
+    )
+
+    async with app.run_test() as pilot:
+        # Initial tab is snippet
+        assert app.details_tabs._tabbed_content.active == "tab-snippet"
+
+        # Simulate completion of auto-fix
+        app._on_fix_completed(finding=finding, proposal=proposal, res=res, error=None)
+
+        # 1. Verify stored in remediations dict
+        f_key = finding.fingerprint or finding.compute_fingerprint()
+        assert f_key in app.remediations
+        stored = app.remediations[f_key]
+        assert stored["root_cause"] == "Use of shell string execution"
+        assert stored["explanation"] == "Safely parse command args with shlex"
+        assert stored["diff"] == diff_text
+        assert stored["provider"] == "gemini"
+        assert stored["model"] == "gemini-2.5-flash"
+
+        # 2. Verify automatically switched to tab-diff
+        assert app.details_tabs._tabbed_content.active == "tab-diff"
+
+        # 3. Verify formatted explanation + diff is displayed (no placeholder)
+        diff_display_text = app.details_tabs.diff_text
+        assert "No remediation generated yet" not in diff_display_text
+        assert "Root Cause:" in diff_display_text
+        assert "Use of shell string execution" in diff_display_text
+        assert "Explanation:" in diff_display_text
+        assert "Safely parse command args with shlex" in diff_display_text
+        assert "subprocess.run" in diff_display_text
+        assert "gemini-2.5-flash" in diff_display_text
+
+        # 4. Verify finding is marked resolved
+        assert f_key in app.findings_view.resolved_fingerprints
+
+        # 5. Verify selecting another finding and then re-selecting preserves stored remediation
+        second_finding = sample_findings[1]
+        app.findings_view.post_message(app.findings_view.FindingSelected(second_finding))
+        await pilot.pause()
+
+        # Second finding has no remediation
+        assert "No remediation generated yet" in app.details_tabs.diff_text
+
+        # Re-select first finding
+        app.findings_view.post_message(app.findings_view.FindingSelected(finding))
+        await pilot.pause()
+
+        # Stored remediation is preserved and rendered
+        assert "No remediation generated yet" not in app.details_tabs.diff_text
+        assert "Use of shell string execution" in app.details_tabs.diff_text
+        assert "subprocess.run" in app.details_tabs.diff_text

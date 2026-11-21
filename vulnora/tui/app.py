@@ -4,6 +4,7 @@ Textual Application for Vulnora AI.
 Provides the responsive, keyboard-driven terminal dashboard:
 - [C]: Copy sanitized surgical prompt / diff to clipboard.
 - [A]: Auto-fix selected vulnerability via Cloud AI & AST Verification Loop.
+- [K]: Configure Google Gemini API key (Session or Local).
 - [R]: Re-scan repository with concurrent 6-scanner orchestrator.
 - [D]: Cycle through detail tabs (Snippet, Prompt, Diff, Guardrail).
 - [G]: Guard action (proceed with push if clean or approve override).
@@ -12,10 +13,11 @@ Provides the responsive, keyboard-driven terminal dashboard:
 
 from __future__ import annotations
 
+import difflib
 import os
 from pathlib import Path
 import sys
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -160,6 +162,7 @@ class VulnoraTUIApp(App[int]):
         self.session_api_key: Optional[str] = None
         self.mock_ai: bool = False
         self.redactor = SecretRedactor()
+        self.remediations: Dict[str, Dict[str, Any]] = {}
 
         # Components
         self.memory_store = ImmuneMemoryStore(
@@ -208,11 +211,56 @@ class VulnoraTUIApp(App[int]):
         elif self.auto_scan_on_mount:
             self.action_rescan()
 
+    def store_remediation(
+        self,
+        finding: Finding,
+        proposal: Optional[RemediationProposal],
+        diff: str,
+        antibody_id: Optional[str] = None,
+    ) -> None:
+        """Stores remediation metadata and diff keyed by finding fingerprint."""
+        f_key = finding.fingerprint or finding.compute_fingerprint()
+        root_cause = proposal.root_cause if proposal else ""
+        explanation = proposal.explanation if proposal else ""
+        provider = (proposal.provider if proposal and proposal.provider else self.config.ai.provider)
+        model = (proposal.model if proposal and proposal.model else self.config.ai.model)
+
+        self.remediations[f_key] = {
+            "finding": finding,
+            "proposal": proposal,
+            "diff": diff,
+            "antibody_id": antibody_id,
+            "root_cause": root_cause,
+            "explanation": explanation,
+            "provider": provider,
+            "model": model,
+        }
+        self.details_tabs.store_remediation(
+            finding_id=f_key,
+            root_cause=root_cause,
+            explanation=explanation,
+            diff=diff,
+            provider=provider,
+            model=model,
+            proposal=proposal,
+            antibody_id=antibody_id,
+        )
+
     def on_findings_list_view_finding_selected(
         self, event: FindingsListView.FindingSelected
     ) -> None:
         """Handles finding selection changes and updates details tabs."""
-        self.details_tabs.update_finding(event.finding)
+        f_key = event.finding.fingerprint or event.finding.compute_fingerprint()
+        stored = self.remediations.get(f_key)
+        if stored:
+            self.details_tabs.update_finding(
+                finding=event.finding,
+                proposal=stored.get("proposal"),
+                diff=stored.get("diff"),
+                antibody_id=stored.get("antibody_id"),
+            )
+        else:
+            self.details_tabs.update_finding(event.finding)
         self.set_status(
             f"Inspecting [{event.finding.severity.value}] {event.finding.rule_id} in {Path(event.finding.file_path).name}"
         )
@@ -308,6 +356,7 @@ class VulnoraTUIApp(App[int]):
         critical_count = sum(
             1 for f in self.findings_view.findings
             if f.severity in (Severity.CRITICAL, Severity.HIGH)
+            and (f.fingerprint or f.compute_fingerprint()) not in getattr(self.findings_view, "resolved_fingerprints", set())
         )
         if critical_count > 0 and self.config.git.block_on_critical:
             self.notify(
@@ -327,6 +376,7 @@ class VulnoraTUIApp(App[int]):
         critical_count = sum(
             1 for f in self.findings_view.findings
             if f.severity in (Severity.CRITICAL, Severity.HIGH)
+            and (f.fingerprint or f.compute_fingerprint()) not in getattr(self.findings_view, "resolved_fingerprints", set())
         )
         if self.is_guard_mode and critical_count > 0 and self.config.git.block_on_critical:
             self.exit_code = 1
@@ -366,18 +416,47 @@ class VulnoraTUIApp(App[int]):
 
     @work(thread=True)
     def run_background_fix(self, finding: Finding) -> None:
-        """Executes Cloud AI generation and FixVerifier verification loop."""
+        """Executes Cloud AI generation or Immune Memory lookup and FixVerifier verification loop."""
         try:
-            client = CloudAIClient(
-                provider=self.config.ai.provider,
-                model=self.config.ai.model,
-                timeout_seconds=self.config.ai.timeout_seconds,
-                api_key=self.get_active_api_key(),
-            )
-            from vulnora.engine.prompt_compiler import SurgicalPromptCompiler
-            compiler = SurgicalPromptCompiler(target_root=self.target_dir, immune_store=self.memory_store)
-            prompt = compiler.compile(finding)
-            proposal = client.generate_remediation(prompt)
+            # 1. Check if an antibody already exists in Immune Memory
+            target_file = self.target_dir / finding.file_path
+            code_snippet = ""
+            if target_file.is_file():
+                try:
+                    lines = target_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                    target_line = finding.line_number or 1
+                    if 1 <= target_line <= len(lines):
+                        code_snippet = lines[target_line - 1].strip()
+                except Exception:
+                    pass
+
+            proposal: Optional[RemediationProposal] = None
+            match = self.memory_store.query(finding, code_snippet=code_snippet)
+            if match and match.record and match.confidence >= 0.85:
+                antibody = match.record
+                proposal = RemediationProposal(
+                    finding_id=finding.fingerprint or finding.compute_fingerprint(),
+                    rule_id=finding.rule_id,
+                    file_path=finding.file_path,
+                    root_cause=f"Matched known immune antibody {antibody.id} (Confidence: {match.confidence * 100:.1f}%).",
+                    explanation=f"Reused verified preventative fix from Immune Memory ({antibody.id}).",
+                    replacement_code=antibody.anonymized_template or "",
+                    agents_rule=antibody.agents_rule,
+                    provider="immune_memory",
+                    model=antibody.id,
+                )
+
+            if not proposal or not proposal.replacement_code:
+                client = CloudAIClient(
+                    provider=self.config.ai.provider,
+                    model=self.config.ai.model,
+                    timeout_seconds=self.config.ai.timeout_seconds,
+                    api_key=self.get_active_api_key(),
+                )
+                from vulnora.engine.prompt_compiler import SurgicalPromptCompiler
+                compiler = SurgicalPromptCompiler(target_root=self.target_dir, immune_store=self.memory_store)
+                prompt = compiler.compile(finding)
+                proposal = client.generate_remediation(prompt)
 
             verifier = FixVerifier(
                 target_root=self.target_dir,
@@ -405,15 +484,44 @@ class VulnoraTUIApp(App[int]):
 
         if res and res.success:
             self.mascot_panel.set_state("VACCINATED", f"Vaccinated {finding.rule_id}! Verified clean.")
+            f_key = finding.fingerprint or finding.compute_fingerprint()
+
+            diff_text = res.diff_unified or (getattr(res, "verified_patch", "") or "")
+            if not diff_text and proposal and proposal.replacement_code:
+                orig = proposal.original_code or finding.snippet or ""
+                rep = proposal.replacement_code
+                if orig and rep:
+                    diff_lines = list(difflib.unified_diff(
+                        orig.splitlines(keepends=True),
+                        rep.splitlines(keepends=True),
+                        fromfile=f"a/{finding.file_path}",
+                        tofile=f"b/{finding.file_path}",
+                    ))
+                    diff_text = "".join(diff_lines)
+
+            # 1. Store remediation in dict
+            self.store_remediation(
+                finding=finding,
+                proposal=proposal,
+                diff=diff_text,
+                antibody_id=res.antibody_id,
+            )
+
+            # 2. Update details_tabs with formatted explanation + diff
             self.details_tabs.update_finding(
                 finding=finding,
                 proposal=proposal,
-                diff=res.diff_unified,
+                diff=diff_text,
                 antibody_id=res.antibody_id,
             )
-            # Remove resolved finding from list
-            remaining = [f for f in self.findings_view.findings if f.compute_fingerprint() != finding.compute_fingerprint()]
-            self.findings_view.set_findings(remaining)
+
+            # 3. Automatically switch focus to Remediation & Diff tab
+            self.details_tabs.switch_tab("tab-diff")
+
+            # 4. Mark finding as resolved in findings view
+            self.findings_view.mark_resolved(f_key)
+
+            # 5. Refresh metrics & status
             self._refresh_metrics()
             self.set_status(f"[✔] Verified clean: Antibody {res.antibody_id} saved to memory.")
             self.notify(f"Vaccinated {finding.rule_id}! Verified clean.", severity="information")
@@ -428,23 +536,32 @@ class VulnoraTUIApp(App[int]):
     # -------------------------------------------------------------------------
 
     def _update_mascot_for_findings(self, findings: List[Finding]) -> None:
-        critical_count = sum(1 for f in findings if f.severity in (Severity.CRITICAL, Severity.HIGH))
+        unresolved = [
+            f for f in findings
+            if (f.fingerprint or f.compute_fingerprint()) not in getattr(self.findings_view, "resolved_fingerprints", set())
+        ]
+        critical_count = sum(1 for f in unresolved if f.severity in (Severity.CRITICAL, Severity.HIGH))
         if critical_count > 0:
             self.mascot_panel.set_state("ALERT", f"{critical_count} Critical/High Threat(s)")
-        elif findings:
-            self.mascot_panel.set_state("ALERT", f"{len(findings)} Medium/Low Finding(s)")
+        elif unresolved:
+            self.mascot_panel.set_state("ALERT", f"{len(unresolved)} Medium/Low Finding(s)")
         else:
             self.mascot_panel.set_state("VIGILANT", "0 Vulnerabilities (Codebase Clean)")
 
     def _refresh_metrics(self) -> None:
         key = self.get_active_api_key()
         ai_status = "[bold green]Ready (Key Loaded)[/]" if key else "[yellow]Offline / Prompt-Only (Press [K])[/]"
+        unresolved_critical = any(
+            f.severity in (Severity.CRITICAL, Severity.HIGH)
+            and (f.fingerprint or f.compute_fingerprint()) not in getattr(self.findings_view, "resolved_fingerprints", set())
+            for f in self.findings_view.findings
+        )
         self.metrics_panel.update_metrics(
             antibody_count=self.memory_store.count(),
             hit_rate=self.memory_store.calculate_hit_rate(),
             protected_branch=self.protected_branch,
             scanner_count=len(self.config.scanners.enabled),
-            status_label="BLOCKED" if any(f.severity in (Severity.CRITICAL, Severity.HIGH) for f in self.findings_view.findings) else "ACTIVE",
+            status_label="BLOCKED" if unresolved_critical else "ACTIVE",
             ai_status=ai_status,
         )
 
