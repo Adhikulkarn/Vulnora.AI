@@ -7,16 +7,13 @@ Provides:
 - FindingsListView: Keyboard-navigable list of security findings with severity badges.
 - CodeDiffTabs: Multi-tab inspector (Snippet, Surgical Prompt, Remediation Diff, Guardrail)
   with strict Zero-Secret Egress via SecretRedactor.
+- ApiKeyModal: Masked modal dialog for entering / saving Gemini API key.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-<<<<<<< HEAD
-from typing import Any, Dict, List, Optional
-=======
 from typing import Any, Dict, List, Optional, Set
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
 
 from rich.panel import Panel
 from rich.table import Table
@@ -209,23 +206,6 @@ class ImmunityMetricsPanel(Static):
 class FindingItem(ListItem):
     """Single item representing a security finding within FindingsListView."""
 
-<<<<<<< HEAD
-    def __init__(self, finding: Finding) -> None:
-        super().__init__()
-        self.finding = finding
-
-    def render(self) -> Text:
-        sev = self.finding.severity
-        color_map = {
-            Severity.CRITICAL: "bold red",
-            Severity.HIGH: "bold dark_orange",
-            Severity.MEDIUM: "bold yellow",
-            Severity.LOW: "cyan",
-            Severity.INFO: "dim white",
-        }
-        color = color_map.get(sev, "white")
-        badge = f"[{sev.value:<8}]"
-=======
     def __init__(self, finding: Finding, is_resolved: bool = False) -> None:
         super().__init__()
         self.finding = finding
@@ -246,7 +226,6 @@ class FindingItem(ListItem):
             }
             color = color_map.get(sev, "white")
             badge = f"[{sev.value:<8}]"
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
 
         loc = f"{Path(self.finding.file_path).name}"
         if self.finding.line_number:
@@ -254,13 +233,8 @@ class FindingItem(ListItem):
 
         text = Text()
         text.append(badge, style=color)
-<<<<<<< HEAD
-        text.append(f" {self.finding.rule_id:<12} ", style="bold white")
-        text.append(f"{loc:<22} ", style="italic cyan")
-=======
         text.append(f" {self.finding.rule_id:<12} ", style="bold white" if not self.is_resolved else "dim white")
         text.append(f"{loc:<22} ", style="italic cyan" if not self.is_resolved else "dim cyan")
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
         text.append(f"({self.finding.scanner_name})", style="dim")
         return text
 
@@ -287,10 +261,7 @@ class FindingsListView(Widget):
         super().__init__(id=id, classes=classes)
         self.findings: List[Finding] = findings or []
         self._list_view: ListView = ListView(id="findings-list")
-<<<<<<< HEAD
-=======
         self.resolved_fingerprints: Set[str] = set()
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
 
     def compose(self):
         yield Label("[bold cyan] Detected Security Findings[/bold cyan]", id="findings-title")
@@ -300,23 +271,12 @@ class FindingsListView(Widget):
         if self.findings:
             self.set_findings(self.findings)
 
-<<<<<<< HEAD
-    def set_findings(self, findings: List[Finding]) -> None:
-=======
     def set_findings(self, findings: List[Finding], select_first: bool = True) -> None:
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
         """Populates the list with findings."""
         self.findings = list(findings)
         if self.is_mounted:
             self._list_view.clear()
             for f in self.findings:
-<<<<<<< HEAD
-                self._list_view.append(FindingItem(f))
-            if self.findings:
-                self._list_view.index = 0
-                self.post_message(self.FindingSelected(self.findings[0]))
-
-=======
                 f_fp = f.fingerprint or f.compute_fingerprint()
                 is_res = f_fp in self.resolved_fingerprints
                 self._list_view.append(FindingItem(f, is_resolved=is_res))
@@ -335,7 +295,6 @@ class FindingsListView(Widget):
                         item.is_resolved = True
                         item.refresh()
 
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
     def clear_findings(self) -> None:
         """Clears all findings."""
         self.findings = []
@@ -387,14 +346,11 @@ class CodeDiffTabs(Widget):
         self.current_proposal: Optional[RemediationProposal] = None
         self.current_diff: Optional[str] = None
         self.current_antibody: Optional[str] = None
-<<<<<<< HEAD
-=======
         self.remediations: Dict[str, Dict[str, Any]] = {}
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
 
         self.snippet_text: str = "Select a finding to inspect source code."
         self.prompt_text: str = "Surgical prompt will appear here."
-        self.diff_text: str = "No remediation generated yet. Press [A] to auto-fix."
+        self.diff_text: str = "No remediation generated yet. Press [A] to trigger Cloud AI auto-fix."
         self.rule_text: str = "Guardrail rules will appear upon vaccination."
 
         self._snippet_display = Static(self.snippet_text, id="tab-snippet-text")
@@ -446,8 +402,6 @@ class CodeDiffTabs(Widget):
         except ValueError:
             self._tabbed_content.active = tabs[0]
 
-<<<<<<< HEAD
-=======
     def switch_tab(self, tab_id: str) -> None:
         """Switches active tab to tab_id (e.g. 'tab-diff')."""
         if self._tabbed_content:
@@ -475,7 +429,6 @@ class CodeDiffTabs(Widget):
             "antibody_id": antibody_id,
         }
 
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
     def update_finding(
         self,
         finding: Optional[Finding],
@@ -488,12 +441,6 @@ class CodeDiffTabs(Widget):
         if target_root:
             self.target_root = target_root
 
-<<<<<<< HEAD
-        self.current_finding = finding
-        self.current_proposal = proposal
-        self.current_diff = diff
-        self.current_antibody = antibody_id
-=======
         f_key = (finding.fingerprint or finding.compute_fingerprint()) if finding else ""
         stored = self.remediations.get(f_key, {})
 
@@ -528,7 +475,6 @@ class CodeDiffTabs(Widget):
         self.current_proposal = active_proposal
         self.current_diff = active_diff
         self.current_antibody = active_antibody
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
 
         if not finding:
             self.snippet_text = "No finding selected."
@@ -552,20 +498,6 @@ class CodeDiffTabs(Widget):
         except Exception as exc:
             self.prompt_text = f"Failed to compile surgical prompt: {exc}"
 
-<<<<<<< HEAD
-        # 3. Update Remediation & Diff
-        if diff:
-            scrubbed_diff = self.redactor.redact(diff).redacted_text
-            self.diff_text = self._colorize_diff(scrubbed_diff)
-        elif proposal:
-            proposal_str = (
-                f"[bold green]Proposed Replacement Code:[/bold green]\n"
-                f"{proposal.replacement_code}\n\n"
-                f"[bold white]Root Cause:[/bold white] {proposal.root_cause}\n"
-                f"[bold white]Explanation:[/bold white] {proposal.explanation}\n"
-            )
-            self.diff_text = self.redactor.redact(proposal_str).redacted_text
-=======
         # 3. Update Remediation & Diff (Formatted Explanation + Diff)
         diff_sections: List[str] = []
 
@@ -589,23 +521,15 @@ class CodeDiffTabs(Widget):
 
         if diff_sections:
             self.diff_text = "\n\n".join(diff_sections)
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
         else:
             self.diff_text = "[dim]No remediation generated yet. Press [A] to trigger Cloud AI auto-fix.[/dim]"
 
         # 4. Update Guardrail Rule
         rule_body = []
-<<<<<<< HEAD
-        if antibody_id:
-            rule_body.append(f"[bold green]✔ Antibody Synthesized:[/bold green] [cyan]{antibody_id}[/cyan]")
-        if proposal and proposal.agents_rule:
-            rule_body.append(f"\n[bold white]AGENTS.md Preventative Guardrail:[/bold white]\n[yellow]- **[{finding.rule_id}]**: {proposal.agents_rule}[/yellow]")
-=======
         if active_antibody:
             rule_body.append(f"[bold green]✔ Antibody Synthesized:[/bold green] [cyan]{active_antibody}[/cyan]")
         if active_proposal and active_proposal.agents_rule:
             rule_body.append(f"\n[bold white]AGENTS.md Preventative Guardrail:[/bold white]\n[yellow]- **[{finding.rule_id}]**: {active_proposal.agents_rule}[/yellow]")
->>>>>>> cacac15 (feat: complete Phase 6 Textual TUI with in-TUI Gemini key)
         elif finding:
             rule_body.append(f"\n[bold white]Rule Guidance for {finding.rule_id}:[/bold white]\n[dim]{finding.description}[/dim]")
         self.rule_text = "\n".join(rule_body)
