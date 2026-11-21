@@ -1,13 +1,17 @@
 version: '1.0'
 project:
-  name: vulnora-backend
-  language: auto
+  name: Vulnora.AI
+  language: python
+  write_permission: prompt
 git:
   protected_branches:
   - main
+  - master
   - production
+  - staging
   enforce_pre_push: true
   block_on_critical: true
+  hooks_dir: null
 scanners:
   enabled:
   - gitleaks
@@ -15,14 +19,11 @@ scanners:
   - bandit
   - osv-scanner
   - trivy
-  - zap
   timeout_seconds: 60
   auto_install_missing: false
 ai:
-  enabled: false
-  provider: ollama
-  model: qwen2.5-coder:7b
-  endpoint: http://localhost:11434
-backend:
-  url: http://127.0.0.1:8000
-  sync_history: false
+  enabled: true
+  provider: gemini
+  model: gemini-2.5-flash
+  endpoint: null
+  timeout_seconds: 60

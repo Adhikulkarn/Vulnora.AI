@@ -1,33 +1,33 @@
 """
-Vulnora AI Modular Security Scanning Engine.
-Provides SAST, DAST, SCA, Secrets, and IaC vulnerability detection.
+6-Scanner Detection Orchestrator for Vulnora AI.
+
+Provides multi-scanner adapters and concurrent orchestration:
+- Gitleaks (Secrets)
+- Semgrep (Multi-language SAST)
+- Bandit (Python AST)
+- OSV-Scanner (Open-source Dependency Auditing)
+- Trivy (Container, IaC, and CVE Scanning)
+- OWASP ZAP (Dynamic Application Security Testing)
 """
 
-from .bandit import BanditScannerService
-from .base import BaseScannerService
-from .data_structures import NormalizedFinding, ScannerExecutionResult, ScanStatus, Severity, mask_secret
-from .gitleaks import GitleaksScannerService
-from .orchestrator import ScannerOrchestrator
-from .osv_scanner import OSVScannerService
-from .semgrep import SemgrepScannerService
-from .sync import sync_scan_to_backend
-from .trivy import TrivyScannerService
-from .zap import OWASPZAPScannerService
+from vulnora.scanners.bandit import BanditScanner
+from vulnora.scanners.base import BaseScanner, ScanContext
+from vulnora.scanners.gitleaks import GitleaksScanner
+from vulnora.scanners.osv_scanner import OSVScanner
+from vulnora.scanners.runner import SCANNER_REGISTRY, ScannerOrchestrator
+from vulnora.scanners.semgrep import SemgrepScanner
+from vulnora.scanners.trivy import TrivyScanner
+from vulnora.scanners.zap import ZAPScanner
 
 __all__ = [
-    "BanditScannerService",
-    "BaseScannerService",
-    "GitleaksScannerService",
-    "NormalizedFinding",
-    "OSVScannerService",
-    "OWASPZAPScannerService",
-    "ScannerExecutionResult",
+    "BaseScanner",
+    "ScanContext",
     "ScannerOrchestrator",
-    "ScanStatus",
-    "SemgrepScannerService",
-    "Severity",
-    "TrivyScannerService",
-    "mask_secret",
-    "sync_scan_to_backend",
+    "SCANNER_REGISTRY",
+    "GitleaksScanner",
+    "SemgrepScanner",
+    "BanditScanner",
+    "OSVScanner",
+    "TrivyScanner",
+    "ZAPScanner",
 ]
-

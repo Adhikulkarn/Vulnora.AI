@@ -1,259 +1,194 @@
+# 🛡️ Vulnora AI (`vulnora`)
 
+[![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Terminal UI](https://img.shields.io/badge/UI-Textual%20TUI-cyan.svg)](https://textual.textualize.io/)
+[![Zero-Secret Egress](https://img.shields.io/badge/Security-Zero--Secret%20Egress-green.svg)](#zero-secret-pre-egress-scrubbing)
 
-# Vulnora AI - Backend Service
-
-> **Branch-Aware CLI Security Guard with Tiered Auto-Remediation, Remote Open-Weight AI Inference, and Local Issue Memory**
-
----
-
-## 1. Project Overview
-
-**Vulnora AI** is an installable command-line security guard (`vulnora`) and orchestration platform that intercepts pushes targeting protected branches (such as `main` or `production`), runs local open-source security scanners (Gitleaks, Semgrep, Bandit, OSV-Scanner), consults local/cloud issue memory for solved patterns, and routes complex vulnerabilities to a dedicated remote AI inference server running open-weight coding models (such as Qwen3-Coder or Devstral via Ollama).
-
-This repository houses the **Django REST Framework (DRF) backend service**, providing:
-- **Central API & Health Probes:** Health probes and system status endpoints for CLI and infrastructure.
-- **Projects & Branch Protection Policies:** Multi-repository configuration, branch gatekeeping rules, and write-permission modes.
-- **Scan Aggregation:** Ingestion and normalization of security findings from multiple static and secret scanners.
-- **Remediation & Issue Memory:** Storage and synchronization of resolved issues, root causes, and verified patches.
-- **AI Engine Gateway:** Orchestration with remote Ollama inference instances for contextual reasoning and automated diff generation.
-- **Interactive OpenAPI/Swagger Documentation:** Auto-generated API documentation via `drf-spectacular`.
+> **Autonomous Codebase Immunity Sentinel** — Standalone, language-agnostic security CLI & Interactive TUI that turns any Git repository into a **Self-Vaccinating Codebase**.
 
 ---
 
-## 2. Directory Structure
+## 🌟 Why Vulnora AI?
 
-```text
-vulnora-backend/
-├── .env.example              # Sample environment configuration template
-├── .env                      # Local environment configuration (git-ignored)
-├── .gitignore                # Production gitignore rules
-├── manage.py                 # Django management CLI utility
-├── requirements.txt          # Python dependencies
-├── README.md                 # Project documentation
-├── vulnora/                  # Project configuration root
-│   ├── __init__.py
-│   ├── asgi.py               # ASGI application entry point
-│   ├── wsgi.py               # WSGI application entry point
-│   ├── urls.py               # Global routing & documentation URLs
-│   └── settings/             # Environment-specific settings
-│       ├── __init__.py
-│       ├── base.py           # Shared settings, apps, middleware, databases
-│       ├── development.py    # Local development settings
-│       └── production.py     # Hardened production settings
-└── apps/                     # Modular Django applications
-    ├── __init__.py
-    ├── core/                 # Health checks, system status, API root, base models
-    │   ├── apps.py
-    │   ├── models.py         # TimeStampedModel abstract base
-    │   ├── serializers.py
-    │   ├── views.py          # ApiRootView, HealthCheckView, SystemStatusView
-    │   └── urls.py
-    ├── projects/             # Repository settings & branch protection policies
-    │   ├── apps.py
-    │   ├── models.py
-    │   ├── serializers.py
-    │   ├── views.py
-    │   └── urls.py
-    ├── scans/                # Security scanner orchestrator & findings
-    │   ├── apps.py
-    │   ├── models.py
-    │   ├── serializers.py
-    │   ├── views.py
-    │   └── urls.py
-    ├── remediation/          # Issue memory, root causes, and patch workflows
-    │   ├── apps.py
-    │   ├── models.py
-    │   ├── serializers.py
-    │   ├── views.py
-    │   └── urls.py
-    └── ai_engine/            # Remote AI inference integration (Ollama / Qwen)
-        ├── apps.py
-        ├── models.py
-        ├── serializers.py
-        ├── views.py
-        └── urls.py
+Traditional security linters only report errors — they don't fix them safely, and they don't prevent AI coding agents (Cursor, Copilot, Antigravity) from re-introducing the same vulnerabilities in the next prompt.
+
+**Vulnora AI** closes the loop:
+1. **Fleet Scanning:** Runs 6 concurrent security scanners (Gitleaks, Semgrep, Bandit, OSV-Scanner, Trivy, OWASP ZAP) with automatic tool gating.
+2. **Pre-Egress Zero-Secret Redaction:** Scrubs all API keys, bearer tokens, DB credentials, and high-entropy secrets before anything leaves your machine.
+3. **Surgical AI Remediation:** Generates precise, minimal AST-bounded replacements using high-speed LLMs (Google Gemini 2.5 Flash, Groq, OpenAI, or local Ollama).
+4. **Dual-Gate Verification:** Applies patches to an isolated sandbox, re-runs linters, and verifies AST preservation. Automatically rolls back if regressions occur.
+5. **Lifelong Immunity (`AGENTS.md`):** Records verified antibodies in `.vulnora/memory.json` and writes human/agent guardrails into `AGENTS.md` so coding agents stay immunized forever.
+6. **Pre-Push Git Guard:** Seamlessly hooks into `git push` to protect `main` and release branches from critical regressions.
+
+---
+
+## 🚀 Architecture
+
+```mermaid
+flowchart TD
+    A["Git Pre-Push / CLI / TUI"] --> B["Scanner Orchestrator (6 Scanners)"]
+    B --> C{"Immune Cache Check"}
+    C -- "Cache Hit (Known Antibody)" --> D["Instant AST Fix & AGENTS.md"]
+    C -- "Cache Miss (New Vulnerability)" --> E["Pre-Egress Secret Redactor"]
+    E --> F["Surgical Prompt Compiler"]
+    F --> G["Cloud AI Remediation Engine (Gemini / Groq / OpenAI / Ollama)"]
+    G --> H["FixVerifier Loop (Sandbox + Linter Re-run)"]
+    H -- "Fails / Regresses" --> I["Rollback Patch & Alert User"]
+    H -- "Verified Clean" --> J["Immune Store + AGENTS.md (Self-Vaccinated)"]
 ```
 
 ---
 
-## 3. Getting Started
+## 📦 Installation
 
-### 3.1 Prerequisites
-- Python 3.12+ (or 3.13)
-- Virtual environment (`venv`)
+### Option 1: One-Command Global Install via `pipx` (Recommended)
+```bash
+pipx install git+https://github.com/Aditya-S-0/Vulnora.AI.git
+```
 
-### 3.2 Environment Setup
+### Option 2: Fast Install via `uv`
+```bash
+uv tool install git+https://github.com/Aditya-S-0/Vulnora.AI.git
+```
 
-1. **Activate the virtual environment:**
-   ```powershell
-   # Windows PowerShell:
-   .venv\Scripts\Activate.ps1
-   ```
-
-2. **Install dependencies:**
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-3. **Configure environment variables:**
-   Copy `.env.example` to `.env` and adjust as needed:
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-
-4. **Apply database migrations:**
-   ```powershell
-   python manage.py migrate
-   ```
-
-5. **Start the development server:**
-   ```powershell
-   python manage.py runserver
-   ```
-
----
-
-## 4. Vulnora AI CLI Foundation
-
-Vulnora includes an installable command-line interface (`vulnora`) built with **Typer** and styled with **Rich** terminal UI, featuring the Vulnora Sentinel Mascot split-pane interface.
-
-### 4.1 CLI Installation
-
-Install the package locally in editable development mode:
-
-```powershell
-pip install -e .
+### Option 3: From Source (Development)
+```bash
+git clone https://github.com/Aditya-S-0/Vulnora.AI.git
+cd Vulnora.AI
+python -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
 ```
 
 Verify installation:
-```powershell
+```bash
 vulnora --version
-vulnora --help
-```
-
-### 4.2 CLI Commands
-
-#### 1. `vulnora init`
-Initializes Vulnora AI in the target Git repository:
-- Validates the current directory is a Git repository.
-- Generates the `.vulnora/` workspace.
-- Creates `.vulnora/config.yaml` with protected branch configurations (`main`, `production`).
-- Creates `.vulnora/memory.json` for issue-memory and patch state tracking.
-- Updates `.gitignore` to protect cache, memory, and local configuration files.
-- Installs the Git **pre-push hook** (`.git/hooks/pre-push`) with non-destructive chaining of existing hooks (`.pre-vulnora`).
-
-```powershell
-vulnora init
-# Or initialize a specific directory:
-vulnora init --path "C:\path\to\project"
-```
-
-#### 2. `vulnora guard`
-Evaluates branch protection policies based on your current checked-out Git branch or Git pre-push hook input:
-- Receives ref updates streamed by Git on `git push` (`<local_ref> <local_sha> <remote_ref> <remote_sha>`).
-- Detects whether push targets protected destination branches (`main`, `production`).
-- Bypasses security checks safely for branch deletions and tag pushes.
-- Displays the live Rich split-pane terminal interface with the Sentinel Mascot.
-
-```powershell
-vulnora guard
-# Or test a specific branch policy manually:
-vulnora guard --branch feature/login-auth
-```
-
-### 4.3 Git Pre-Push Hook & Protected Branch Configuration
-
-Vulnora intercepts pushes targeting protected branches defined in `.vulnora/config.yaml`:
-
-```yaml
-version: "1.0"
-git:
-  protected_branches:
-    - main
-    - production
-  pre_push_hook:
-    enabled: true
-  enforce_pre_push: true
-  block_on_critical: true
-```
-
-- **Protected Pushes:** When pushing commits to `main` or `production`, Vulnora intercepts the push, displays the Sentinel Alert Mascot, and runs security checks.
-- **Feature Branches:** Pushing to non-protected branches (e.g. `develop`, `feature/xyz`) bypasses security checks to maintain fast developer iteration.
-- **Hook Chaining:** If your repository already has a custom pre-push hook, `vulnora init` backs it up to `.git/hooks/pre-push.pre-vulnora` and executes both safely.
-
-
-#### 3. `vulnora scan`
-Executes local security scanners directly against your repository code, dependencies, and optional running web applications:
-
-```powershell
-# 1. Run all available filesystem scanners against the current repository:
-vulnora scan
-
-# 2. Scan a specific directory:
-vulnora scan --path "C:\path\to\code"
-
-# 3. Select individual scanners:
-vulnora scan --scanner bandit --scanner gitleaks
-
-# 4. Perform DAST scanning against an explicitly provided running web application:
-vulnora scan --zap-target "http://127.0.0.1:8000" --scanner zap
-
-# 5. Export structured results to a JSON file:
-vulnora scan --output scan-results.json
-
-# 6. Stream JSON directly to stdout for CI/CD scripting:
-vulnora scan --json
-
-# 7. Optionally synchronize scan results with the central Vulnora backend:
-vulnora scan --sync
-```
-
-##### Supported Security Scanners:
-1. **Gitleaks:** Detects committed API keys, tokens, passwords, and private secrets (with automatic redaction in all outputs).
-2. **Semgrep:** Fast multi-language SAST pattern scanning for vulnerabilities and insecure idioms.
-3. **Bandit:** Python AST static code security analysis.
-4. **OSV-Scanner:** Open-source vulnerability scanner querying the Google OSV database for dependencies.
-5. **Trivy:** Comprehensive filesystem, software bill of materials (SBOM), and IaC misconfiguration scanner.
-6. **OWASP ZAP:** Dynamic Application Security Testing (DAST) baseline scans against explicitly specified URLs.
-
-#### 4. `vulnora memory`
-Local Issue Memory System storing verified vulnerability resolutions in `.vulnora/memory.json`:
-- **Deterministic Signatures:** Computes collision-resistant SHA-256 signatures combining scanner name, rule ID/CVE, language/file type, and normalized code fingerprints.
-- **Hierarchical Lookup Engine:** Matches recurring issues by exact signature, rule + language, or partial rule match.
-- **Reference-Only Intelligence:** Automatically retrieves previously verified fixes and root causes during `vulnora scan` and `vulnora guard` without modifying source code.
-- **Safe & Atomic:** Uses atomic file replacement with automatic recovery and timestamped backups if corrupted. Never stores raw secrets or API keys.
-
-```powershell
-# 1. List all stored verified vulnerability resolutions:
-vulnora memory list
-
-# 2. View complete details, root cause, and remediation for a memory record:
-vulnora memory show mem_d885ba4a1d
-
-# 3. Search memory records by scanner, rule ID, severity, or keyword:
-vulnora memory search --scanner bandit --query "MD5"
-
-# 4. Display memory usage analytics and match frequencies:
-vulnora memory stats
-
-# 5. Record a verified vulnerability resolution into local memory:
-vulnora memory record --title "Insecure MD5 Hash" --scanner bandit --rule-id B303 --severity HIGH --root-cause "Weak hashing algorithm" --remediation "Use hashlib.sha256()" --file-path "auth.py" --verified
 ```
 
 ---
 
-## 5. API Endpoints
+## ⚡ Quickstart
 
-| Method | Endpoint | Description |
+### 1. Initialize Vulnora in Any Repository
+```bash
+cd /path/to/your/project
+vulnora init
+```
+This generates `.vulnora/config.yaml`, creates local immune storage, and configures `.gitignore`.
+
+### 2. Launch the Interactive Textual TUI
+```bash
+vulnora tui
+```
+Opens the keyboard-driven security command center with real-time telemetry, sentinel mascot, findings inspector, and one-key auto-fix.
+
+### 3. Install Pre-Push Protection
+```bash
+vulnora guard --install-hook
+```
+Installs an autonomous `.git/hooks/pre-push` script. Any `git push` to protected branches (`main`, `master`, `production`) will be scanned before leaving your machine.
+
+---
+
+## 🖥️ Interactive TUI Dashboard (`vulnora tui`)
+
+The interactive terminal dashboard provides split-pane security inspection and keyboard-driven remediation:
+
+```
+┌─ Sentinel Mascot ─────────────┐┌─ Immunity Telemetry ─────────────┐
+│    🛡️  [VULNORA SENTINEL]     ││ Immune Memory : 12 Antibodies    │
+│       /───\  Posture: VIGILANT ││ Cache Hit Rate: 95.5% Intercept │
+│      │ o.o │ Git Push: READY  ││ Target Branch : main (Protected) │
+│       \───/                   ││ Cloud AI      : Ready (Key Loaded│
+└───────────────────────────────┘└──────────────────────────────────┘
+┌─ Detected Findings (45%) ──────┐┌─ Inspection Tabs (55%) ───────────┐
+│ [HIGH    ] B605  service.py:10 ││ [Snippet] [Prompt] [Diff] [Rule]  │
+│ [MEDIUM  ] CWE89 db.py:25      ││                                   │
+└────────────────────────────────┘└───────────────────────────────────┘
+ [C]opy  [A]uto-Fix  [K]ey  [R]e-scan  [D]etails  [G]uard  [Q]uit
+```
+
+### Keyboard Shortcuts Reference
+
+| Key | Action | Description |
 |---|---|---|
-| `GET` | `/api/docs/` | Interactive Swagger UI (OpenAPI 3.0) |
-| `GET` | `/api/redoc/` | ReDoc API Documentation |
-| `GET` | `/api/schema/` | Raw OpenAPI Schema JSON/YAML |
-| `GET` | `/api/v1/` | API Root Navigation |
-| `GET` | `/api/v1/health/` | Lightweight health check probe (for CLI & uptime checks) |
-| `GET` | `/api/v1/status/` | System status (DB readiness, active policies, environment) |
-| `GET` | `/api/v1/projects/` | Projects & Branch Protection Module status |
-| `GET` | `/api/v1/scans/` | Scans & Scanner Orchestrator status |
-| `GET` | `/api/v1/remediation/` | Remediation & Issue Memory Module status |
-| `GET` | `/api/v1/ai/` | Remote AI Inference Gateway status |
+| **`[K]`** | **API Key** | In-TUI modal to enter/update Gemini API key (Session or Local `.vulnora/credentials.local`). |
+| **`[A]`** | **Auto-Fix** | Synthesizes surgical AI patch and executes full AST Verification Loop. Auto-prompts for key if missing. |
+| **`[C]`** | **Copy** | Zero-Secret scrubbed copy of active tab (Snippet, Surgical Prompt, Diff, or Rule) to clipboard. |
+| **`[R]`** | **Re-Scan** | Non-blocking background re-scan with all 6 concurrent scanners. |
+| **`[D]`** | **Next Tab** | Cycles through details tabs: `Snippet` ➔ `Prompt` ➔ `Diff` ➔ `Guardrail`. |
+| **`[G]`** | **Guard** | Approves pre-push inspection or proceeds if codebase is verified clean. |
+| **`[Q]`** | **Quit** | Exits TUI. In pre-push guard mode, returns exit code `1` if unresolved threats remain. |
 
+---
+
+## 🔑 In-TUI Gemini API Key Management
+
+Vulnora AI features seamless in-TUI API key management:
+- Press **`[K]`** at any time to open the **API Key Configuration Modal**.
+- All inputs are **password-masked** so screen recordings and shoulder-surfers see nothing.
+- **Save for Session:** Keeps the key in memory only for the current terminal run.
+- **Save Locally (`.vulnora`):** Persists the key to `.vulnora/credentials.local` with strict POSIX permissions (`chmod 0o600`, owner read/write only) and automatically ensures it is ignored in `.gitignore`.
+- **Automatic Auto-Fix Prompt:** Pressing `[A]` when no key is configured prompts the key entry modal before starting remediation.
+
+Alternatively, set an environment variable before launching:
+```bash
+export GEMINI_API_KEY="AIzaSy..."
+```
+
+---
+
+## 🔒 Zero-Secret Pre-Egress Scrubbing
+
+Vulnora AI guarantees **Zero-Secret Egress**:
+- Outbound AI prompts, clipboard copies (`[C]`), and saved immune records are scrubbed prior to transmission.
+- Pre-configured detection for PEM private keys, AWS access/secret keys, GitHub PATs, Slack/Stripe tokens, JWTs, database URLs, and high-entropy credential assignments.
+- Active Gemini API keys entered via the TUI are automatically registered into the runtime redactor so they can never leak.
+
+---
+
+## 🛠️ CLI Command Reference
+
+| Command | Usage | Description |
+|---|---|---|
+| `vulnora init` | `vulnora init [--language LANG] [--force]` | Initializes `.vulnora/config.yaml` and local immune storage. |
+| `vulnora status` | `vulnora status` | Displays configuration, immune memory count, and scanner tool availability. |
+| `vulnora scan` | `vulnora scan [--target DIR] [--scanner NAME]` | Executes concurrent scanner fleet across codebase or staged diff. |
+| `vulnora fix` | `vulnora fix --file FILE --line NUM [--model M]` | Surgically fixes a specific finding with AI and verification loop. |
+| `vulnora guard` | `vulnora guard [--install-hook] [--uninstall-hook]` | Manages Git pre-push hook or executes pre-push threat inspection. |
+| `vulnora pack` | `vulnora pack export / import --file PACK.json` | Exports or imports sharable antibody immunization packs. |
+| `vulnora tui` | `vulnora tui [--target DIR]` | Launches the interactive split-pane terminal dashboard. |
+
+---
+
+## 🛡️ Scanner Fleet & Tool Auto-Gating
+
+Vulnora AI orchestrates 6 security tools in parallel:
+1. **Gitleaks:** Secret detection and leaked credentials.
+2. **Semgrep:** AST semantic rule scanning.
+3. **Bandit:** Python AST security analysis.
+4. **OSV-Scanner:** Open-source dependency vulnerabilities.
+5. **Trivy:** Container and package vulnerability scanning.
+6. **OWASP ZAP:** Web endpoint and baseline application security.
+
+**Graceful Degradation:** If any scanner is not installed on your system PATH, Vulnora gates it automatically without crashing or failing your build.
+
+---
+
+## 🧪 Testing
+
+Run test suite with pytest:
+```bash
+pytest
+```
+Run TUI and Phase 6 tests:
+```bash
+pytest tests/test_tui_api_key.py tests/test_tui_app.py tests/test_cli_phase6.py
+```
+
+---
+
+## 📄 License
+
+Vulnora AI is licensed under the [MIT License](LICENSE).

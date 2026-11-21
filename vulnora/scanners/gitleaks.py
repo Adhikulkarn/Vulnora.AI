@@ -1,187 +1,126 @@
+"""
+Gitleaks secret scanner adapter for Vulnora AI.
+
+Scans repositories for exposed secrets, hardcoded API keys, private keys, and tokens
+across all programming languages and file types.
+"""
+
+from __future__ import annotations
+
 import json
-import logging
-import os
-import subprocess
-import tempfile
-import time
 from pathlib import Path
-from typing import Any, List
+import tempfile
+from typing import Any, Dict, List
 
-from .base import BaseScannerService
-from .data_structures import NormalizedFinding, ScannerExecutionResult
-
-logger = logging.getLogger(__name__)
+from vulnora.core.models import Finding, ScannerResult, ScanStatus, Severity
+from vulnora.scanners.base import BaseScanner, ScanContext
 
 
-class GitleaksScannerService(BaseScannerService):
+class GitleaksScanner(BaseScanner):
     """
-    Modular scanner service for Gitleaks.
-    Detects hardcoded secrets, API keys, private keys, passwords, and tokens.
-    Guarantees secret values are masked and never exposed in logs or API responses.
+    Adapter for Gitleaks secrets detection engine.
+    Applies universally across all languages.
     """
 
-    name = "gitleaks"
-    executable_name = "gitleaks"
+    scanner_name: str = "gitleaks"
+    binary_name: str = "gitleaks"
 
-    def scan(self, project_path: Path, timeout_seconds: int = 60) -> ScannerExecutionResult:
-        start_time = time.time()
-        exe = self.find_executable()
+    def should_run(self, context: ScanContext) -> bool:
+        """Secrets can appear in any language or configuration file."""
+        return True
 
-        if not exe:
-            return ScannerExecutionResult(
-                scanner_name=self.name,
-                status="NOT_INSTALLED",
-                duration_seconds=0.0,
-                error_message="Gitleaks executable not found on system.",
-            )
-
-        # Temporary file for JSON report output
-        temp_report = tempfile.NamedTemporaryFile(
-            mode="w+",
-            suffix=".json",
-            delete=False,
-            encoding="utf-8",
-        )
-        temp_report_path = temp_report.name
-        temp_report.close()
+    def _execute_scan(self, context: ScanContext) -> ScannerResult:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            report_path = Path(tmp.name)
 
         try:
-            # Gitleaks command: dir scan with 100% redaction and JSON output
-            # Note: Gitleaks exits with 1 when leaks are found, 0 when clean.
             cmd = [
-                exe,
+                self.executable,
                 "dir",
+                "--path",
+                str(context.target_path),
+                "--report-format",
+                "json",
+                "--report-path",
+                str(report_path),
                 "--no-banner",
-                "--redact",
-                "--report-format", "json",
-                "--report-path", temp_report_path,
-                "-v",
-                str(project_path),
             ]
 
-            proc = self._run_subprocess(cmd, timeout_seconds=timeout_seconds, cwd=project_path)
-            duration = time.time() - start_time
+            proc = self.run_subprocess(cmd, cwd=context.target_path, timeout=context.timeout_seconds)
 
-            # Check if report was generated
-            raw_findings = []
-            if os.path.exists(temp_report_path) and os.path.getsize(temp_report_path) > 0:
-                with open(temp_report_path, "r", encoding="utf-8") as f:
-                    try:
-                        raw_findings = json.load(f)
-                    except json.JSONDecodeError:
-                        raw_findings = []
-            elif proc.stdout:
-                # Fallback: extract JSON array from stdout if present
-                stdout_str = proc.stdout.strip()
-                start_idx = stdout_str.find("[")
-                end_idx = stdout_str.rfind("]")
-                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                    try:
-                        raw_findings = json.loads(stdout_str[start_idx : end_idx + 1])
-                    except json.JSONDecodeError:
-                        raw_findings = []
-
-            # Exit code 0 (clean) or 1 (leaks found) are valid completion states
-            if proc.returncode in (0, 1):
-                normalized = self.normalize(raw_findings, project_path)
-                return ScannerExecutionResult(
-                    scanner_name=self.name,
-                    status="COMPLETED",
-                    duration_seconds=duration,
-                    findings=normalized,
-                    raw_output=raw_findings,
-                )
-            else:
-                error_msg = proc.stderr.strip() or f"Gitleaks exited with code {proc.returncode}"
-                return ScannerExecutionResult(
-                    scanner_name=self.name,
-                    status="FAILED",
-                    duration_seconds=duration,
-                    error_message=error_msg,
+            # Gitleaks exit codes: 0 = no leaks, 1 = leaks found, 2+ = runtime error
+            if proc.returncode not in (0, 1):
+                err = proc.stderr.strip() or proc.stdout.strip() or f"Gitleaks exited with code {proc.returncode}"
+                return ScannerResult(
+                    scanner_name=self.scanner_name,
+                    status=ScanStatus.FAILED,
+                    error_message=err,
+                    raw_output=proc.stdout or proc.stderr,
                 )
 
-        except subprocess.TimeoutExpired:
-            return ScannerExecutionResult(
-                scanner_name=self.name,
-                status="TIMED_OUT",
-                duration_seconds=time.time() - start_time,
-                error_message=f"Gitleaks execution timed out after {timeout_seconds}s",
-            )
-        except Exception as exc:
-            logger.exception(f"Unexpected error executing Gitleaks: {exc}")
-            return ScannerExecutionResult(
-                scanner_name=self.name,
-                status="FAILED",
-                duration_seconds=time.time() - start_time,
-                error_message=str(exc),
+            findings: List[Finding] = []
+            if report_path.exists() and report_path.stat().st_size > 0:
+                try:
+                    content = report_path.read_text(encoding="utf-8")
+                    data = json.loads(content)
+                    if isinstance(data, list):
+                        findings = self._parse_findings(data)
+                except Exception as exc:
+                    return ScannerResult(
+                        scanner_name=self.scanner_name,
+                        status=ScanStatus.FAILED,
+                        error_message=f"Failed to parse Gitleaks report JSON: {exc}",
+                        raw_output=proc.stdout,
+                    )
+
+            return ScannerResult(
+                scanner_name=self.scanner_name,
+                status=ScanStatus.COMPLETED,
+                findings=findings,
+                raw_output=proc.stdout,
             )
         finally:
-            if os.path.exists(temp_report_path):
+            if report_path.exists():
                 try:
-                    os.remove(temp_report_path)
-                except OSError:
+                    report_path.unlink()
+                except Exception:
                     pass
 
-    def normalize(self, raw_data: Any, project_path: Path) -> List[NormalizedFinding]:
-        if not isinstance(raw_data, list):
-            return []
+    def _parse_findings(self, raw_items: List[Dict[str, Any]]) -> List[Finding]:
+        findings: List[Finding] = []
+        for item in raw_items:
+            rule_id = str(item.get("RuleID") or "secret-detected")
+            description = str(item.get("Description") or f"Exposed secret ({rule_id})")
+            file_path = str(item.get("File") or "")
+            line_no = item.get("StartLine")
+            end_line_no = item.get("EndLine")
+            secret_match = str(item.get("Match") or "")
+            secret_value = str(item.get("Secret") or "")
 
-        normalized: List[NormalizedFinding] = []
+            # Mask snippet for safety
+            snippet = secret_match
+            if secret_value and len(secret_value) > 4:
+                masked = secret_value[:2] + ("*" * (len(secret_value) - 4)) + secret_value[-2:]
+                snippet = snippet.replace(secret_value, masked)
 
-        # High-risk secret types mapped to CRITICAL
-        critical_rule_keywords = ["private-key", "aws", "gcp", "azure", "github", "slack", "password"]
+            # Secrets are high/critical severity
+            sev = Severity.CRITICAL if any(k in rule_id.lower() for k in ("key", "token", "pass", "cred", "secret")) else Severity.HIGH
 
-        for item in raw_data:
-            if not isinstance(item, dict):
-                continue
-
-            rule_id = item.get("RuleID", "generic-secret")
-            desc = item.get("Description") or f"Exposed sensitive secret matching rule '{rule_id}'"
-            file_path = self.to_relative_path(item.get("File", ""), project_path)
-            line = item.get("StartLine")
-            end_line = item.get("EndLine")
-
-            # Determine severity
-            rule_lower = rule_id.lower()
-            if any(k in rule_lower for k in critical_rule_keywords):
-                severity = "CRITICAL"
-            else:
-                severity = "HIGH"
-
-            remediation = (
-                "Revoke and rotate the exposed secret immediately. Remove the sensitive value "
-                "from source code and configuration files, and store credentials securely using "
-                "environment variables (.env) or a secret manager (e.g., Vault, AWS Secrets Manager)."
-            )
-
-            # Sanitize raw details: NEVER leak raw secret strings
-            safe_raw = {
-                "rule_id": rule_id,
-                "file": file_path,
-                "start_line": line,
-                "end_line": end_line,
-                "entropy": item.get("Entropy"),
-                "secret_masked": "***REDACTED***",
-            }
-
-            normalized.append(
-                NormalizedFinding(
-                    title=f"Hardcoded Secret ({rule_id})",
-                    description=desc,
-                    scanner_name=self.name,
+            findings.append(
+                Finding(
+                    title=f"Secret Leak: {description}",
+                    description=description,
+                    scanner_name=self.scanner_name,
                     rule_id=rule_id,
-                    severity=severity,
+                    severity=sev,
                     file_path=file_path,
-                    line_number=line,
-                    end_line_number=end_line,
-                    remediation=remediation,
-                    reference_urls=[
-                        "https://github.com/gitleaks/gitleaks",
-                        "https://owasp.org/www-community/vulnerabilities/Use_of_hard-coded_password",
-                    ],
-                    raw_details=safe_raw,
+                    line_number=int(line_no) if line_no is not None else None,
+                    end_line_number=int(end_line_no) if end_line_no is not None else None,
+                    snippet=snippet,
+                    remediation="Revoke the exposed secret or API key immediately, rotate credentials, and load sensitive values from environment variables or secrets vaults.",
+                    reference_urls=["https://github.com/gitleaks/gitleaks"],
+                    raw_details=item,
+                    is_secret=True,
                 )
             )
-
-        return normalized
-
+        return findings
