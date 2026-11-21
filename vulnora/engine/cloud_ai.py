@@ -30,7 +30,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "groq": "llama-3.1-8b-instant",
     "gemini": "gemini-2.5-flash",
     "openai": "gpt-4o-mini",
-    "ollama": "qwen2.5-coder:7b",
+    "ollama": "qwen2.5-coder:latest",
 }
 
 
